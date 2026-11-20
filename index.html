@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FE: Fortune's Weave - Class Calculator</title>
+  <!-- 🌟 Icones -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header class="main-header">
+      <h1>Fire Emblem: Fortune's Weave</h1>
+      <p class="subtitle">Calculateur de classes & progression</p>
+    </header>
+
+    <!-- Navigation par onglets -->
+    <div class="tabs-nav" style="display: flex; gap: 10px; margin-bottom: 20px; justify-content: center;">
+      <button id="tab-calculator-btn" class="btn-secondary" style="width: auto; padding: 10px 20px; margin-top: 0;">Calculateur de Build</button>
+      <button id="tab-system-btn" class="btn-secondary" style="width: auto; padding: 10px 20px; margin-top: 0; background: #222; color: #d4af37; border: 1px solid #d4af37;">Système de Points & Barème</button>
+      <button id="tab-recruitment-btn" class="btn-secondary" style="width: auto; padding: 10px 20px; margin-top: 0; background: #222; color: #d4af37; border: 1px solid #d4af37;">Recrutement</button>
+      <button id="tab-compare-btn" class="btn-secondary" style="width: auto; padding: 10px 20px; margin-top: 0; background: #222; color: #d4af37; border: 1px solid #d4af37;">Comparateur</button>
+      <button id="tab-factions-btn" class="btn-secondary" style="width: auto; padding: 10px 20px; margin-top: 0; background: #222; color: #d4af37; border: 1px solid #d4af37;">Factions</button>
+    </div>
+
+    <!-- ONGLET SYSTÈMES ET BARÈME -->
+    <section id="system-panel" class="card" hidden>
+      <h2>📊 Système de Points & Calcul de Rang</h2>
+      <p class="subtitle">Comprendre comment le score de synergie et les rangs sont attribués aux classes</p>
+
+      <div class="sub-box" style="margin-top: 20px;">
+        <h4>1. Maîtrises & Compétences (Priorité Majeure)</h4>
+        <p style="color: #ccc; font-size: 0.95rem; line-height: 1.5;">
+          Les compétences et armes du personnage pèsent lourdement dans la balance de la synergie :
+        </p>
+        <ul style="color: #ddd; font-size: 0.95rem; line-height: 1.6; margin-top: 8px;">
+          <li><strong style="color: #2ecc71;">+10 points</strong> par maîtrise compatible entre la classe et le personnage.</li>
+          <li><strong style="color: #e74c3c;">-5 points</strong> de pénalité si une compétence prioritaire/de base du personnage n'est pas supportée par la classe.</li>
+        </ul>
+      </div>
+
+      <div class="sub-box" style="margin-top: 20px;">
+        <h4>2. Gestion des Statistiques Prioritaires</h4>
+        <p style="color: #ccc; font-size: 0.95rem; line-height: 1.5;">
+          Selon l'état stratégique attribué à chaque statistique (clics successifs sur les carrés de stats) :
+        </p>
+        <ul style="color: #ddd; font-size: 0.95rem; line-height: 1.6; margin-top: 8px;">
+          <li><strong style="color: #00e5ff; text-shadow: 0 0 8px rgba(0,229,255,0.6);">★★★ Divine :</strong> Multiplie la croissance (ou l'évolution) par <code style="color: #00e5ff;">1.5</code> en cas de hausse ou de baisse.</li>
+          <li><strong class="stat-majeure-text">★★ Majeure :</strong> Multiplie la croissance (ou l'évolution) par <code style="color: #2ecc71;">1</code> en cas de hausse ou de baisse.</li>
+          <li><strong style="color: #d4af37;">★ Prioritaire :</strong> Multiplie la croissance (ou l'évolution) par <code style="color: #ffd700;">0.5</code> en cas de hausse ou de baisse.</li>
+          <li><strong style="color: #aaaaaa;">• Neutre (Par défaut) :</strong> Apporte un petit bonus de <code style="color: #aaa;">évolution × 0.25</code> points par % de croissance positive (aucun malus si négatif).</li>
+          <li><strong style="color: #e74c3c;">🔻 Moins prioritaire :</strong> Donne <code style="color: #aaaaaa;">0 point</code> si la stat indésirable baisse, mais multiplie l'évolution par <code style="color: #e74c3c;">1.5</code> et retire cette somme (<code style="color: #e74c3c;">-(évolution × 1.5)</code>) si elle augmente.</li>
+        </ul>
+      </div>
+
+      <div class="sub-box" style="margin-top: 20px;">
+        <h4>3. Grille des Rangs</h4>
+        <div class="summary-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px;">
+          <div class="stat-pill"><span class="rank-badge rank-sss">Rang SSS</span><strong>≥ 45 pts</strong></div>
+          <div class="stat-pill"><span class="rank-badge rank-ss">Rang SS</span><strong>≥ 35 pts</strong></div>
+          <div class="stat-pill"><span class="rank-badge rank-s">Rang S</span><strong>≥ 25 pts</strong></div>
+          <div class="stat-pill"><span class="rank-badge rank-a">Rang A</span><strong>≥ 15 pts</strong></div>
+          <div class="stat-pill"><span class="rank-badge rank-b">Rang B</span><strong>≥ 8 pts</strong></div>
+          <div class="stat-pill"><span class="rank-badge rank-c">Rang C</span><strong>≥ 0 pts</strong></div>
+          <div class="stat-pill"><span class="rank-badge rank-d">Rang D</span><strong>≥ -6 pts</strong></div>
+          <div class="stat-pill"><span class="rank-badge rank-e">Rang E</span><strong>≥ -15 pts</strong></div>
+          <div class="stat-pill"><span class="rank-badge rank-f">Rang F</span><strong>&lt; -15 pts</strong></div>
+        </div>
+      </div>
+
+      <!-- Simulateur & Débogueur de Rang -->
+      <div class="sub-box" style="margin-top: 30px; border-top: 2px solid #d4af37; padding-top: 20px;">
+        <h3 style="color: #d4af37; margin-bottom: 6px; text-transform: uppercase;">🧪 Simulateur & Débogueur de Rang</h3>
+        <p class="helper-text" style="color: #aaa; margin-bottom: 15px;">
+          Testez n'importe quelle combinaison Personnage / Classe pour inspecter le détail mathématique exact du score.
+        </p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+          <div>
+            <label for="sim-char-select" style="display: block; margin-bottom: 6px; color: #f7e7ce;"><strong>1. Personnage de test :</strong></label>
+            <select id="sim-char-select" class="styled-select">
+              <option value="">-- Choisir un personnage --</option>
+            </select>
+          </div>
+          <div>
+            <label for="sim-class-select" style="display: block; margin-bottom: 6px; color: #f7e7ce;"><strong>2. Classe à tester :</strong></label>
+            <select id="sim-class-select" class="styled-select">
+              <option value="">-- Choisir une classe --</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="sim-config-area" hidden style="background: #141414; border: 1px solid #383838; border-radius: 6px; padding: 15px; margin-bottom: 15px;">
+          <h5 style="color: #d4af37; margin: 0 0 8px 0; text-transform: uppercase; font-size: 0.85rem;">Maîtrises actives du personnage (cliquez pour activer/désactiver) :</h5>
+          <div id="sim-skills-list" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 15px;"></div>
+
+          <h5 style="color: #d4af37; margin: 0 0 8px 0; text-transform: uppercase; font-size: 0.85rem;">Priorités des statistiques :</h5>
+          <div id="sim-stats-list" class="growths-grid" style="margin-top: 8px;"></div>
+        </div>
+
+        <div id="sim-result-area" hidden style="background: #181818; border: 1px solid #d4af37; border-radius: 6px; padding: 18px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #383838; padding-bottom: 12px; margin-bottom: 15px;">
+            <div>
+              <span id="sim-res-subtitle" style="font-size: 0.85rem; color: #aaa;">Résultat du calcul</span>
+              <h3 id="sim-res-title" style="margin: 2px 0 0 0; color: #f7e7ce;">Personnage + Classe</h3>
+            </div>
+            <div id="sim-res-badge" style="display: flex; align-items: center; gap: 8px;"></div>
+          </div>
+
+          <div id="sim-error-check" style="margin-bottom: 15px;"></div>
+
+          <h4 style="color: #d4af37; font-size: 0.95rem; margin-bottom: 8px; text-transform: uppercase;">Détail ligne par ligne du calcul :</h4>
+          <table class="growth-table">
+            <thead>
+              <tr>
+                <th>Critère évalué</th>
+                <th>Règle appliquée</th>
+                <th>Détail du calcul</th>
+                <th>Points</th>
+              </tr>
+            </thead>
+            <tbody id="sim-breakdown-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ONGLET RECRUTEMENT -->
+    <section id="recruitment-panel" class="card" hidden>
+      <h2 style="text-align: center; color: #f7e7ce; margin-bottom: 4px;">🤝 Guide de Recrutement par Route</h2>
+      <p class="subtitle" style="text-align: center; margin-bottom: 20px;">Sélectionnez un Héros pour afficher les personnages recrutables classés par Renom</p>
+
+      <!-- PARTIE HAUTE : Les 4 cercles des Lords -->
+      <div id="recruitment-lords-row" class="lords-circles-container"></div>
+
+      <!-- TRAIT NOIR DE SÉPARATION -->
+      <hr class="recruitment-divider">
+
+      <!-- ZONE DES PERSONNAGES SÉLECTIONNÉS -->
+      <div id="recruitment-selected-section" class="selected-roster-box">
+        <div class="selected-roster-header">
+          <h4 style="margin: 0; color: #d4af37; text-transform: uppercase; font-size: 0.95rem;">
+            🛡️ Équipe sélectionnée (<span id="selected-roster-count">0</span>)
+          </h4>
+          <div class="roster-actions">
+            <span id="save-team-status" class="save-team-status"></span>
+            <button id="save-team-btn" type="button" class="btn-save-team">
+              <svg class="btn-save-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.5L5 21V4a1 1 0 0 1 1-1z" />
+                <path class="btn-save-check" d="M8.5 9.5l2.5 2.5 4.5-4.5" />
+              </svg>
+              <span>Enregistrer l'équipe</span>
+            </button>
+            <button id="clear-recruitment-selection" type="button" class="btn-clear-roster" hidden>
+              Tout vider
+            </button>
+          </div>
+        </div>
+        <div id="recruitment-selected-list" class="selected-roster-grid">
+          <p class="empty-roster-msg">Cliquez sur un personnage dans la liste ci-dessous pour l'ajouter à votre équipe.</p>
+        </div>
+      </div>
+
+      <!-- LÉGENDE DES SOUTIENS -->
+      <div class="recruitment-legend">
+        <span class="rec-badge badge-auto">Auto : Automatique</span>
+        <span class="rec-badge badge-s1">S1 : Soutien rang 1</span>
+        <span class="rec-badge badge-s2">S2 : Soutien rang 2</span>
+        <span class="rec-badge badge-s3">S3 : Soutien rang 3</span>
+      </div>
+
+      <!-- RECHERCHE DE PERSONNAGE -->
+      <div class="recruitment-search-box">
+        <input type="search" id="recruitment-search" placeholder="🔍 Rechercher un personnage..." autocomplete="off">
+      </div>
+
+      <!-- PARTIE BASSE : Liste des personnages classés par Renom -->
+      <div id="recruitment-list-container"></div>
+    </section>
+
+    <!-- ONGLET COMPARATEUR -->
+    <section id="compare-panel" class="card" hidden>
+      <h2 style="text-align: center; color: #f7e7ce; margin-bottom: 4px;">⚖️ Comparateur de personnages</h2>
+      <p class="subtitle" style="text-align: center; margin-bottom: 20px;">Choisissez deux personnages pour comparer leurs stats de base ou leurs croissances</p>
+
+      <div class="compare-pickers">
+        <div class="compare-slot compare-slot-a">
+          <select id="compare-select-a" class="styled-select"></select>
+          <div id="compare-card-a" class="compare-card"></div>
+        </div>
+        <button id="compare-swap-btn" type="button" class="compare-swap-btn" title="Inverser les deux personnages">⇄</button>
+        <div class="compare-slot compare-slot-b">
+          <select id="compare-select-b" class="styled-select"></select>
+          <div id="compare-card-b" class="compare-card"></div>
+        </div>
+      </div>
+
+      <div class="compare-mode-toggle">
+        <button type="button" class="compare-mode-btn active" data-mode="baseStats">Stats de base</button>
+        <button type="button" class="compare-mode-btn" data-mode="growths">Croissances</button>
+      </div>
+
+      <div class="compare-body">
+        <div id="compare-radar" class="compare-radar"></div>
+        <div id="compare-table" class="compare-table-wrap"></div>
+      </div>
+    </section>
+
+    <!-- ONGLET FACTIONS -->
+    <section id="factions-panel" class="card" hidden>
+      <h2 style="text-align: center; color: #f7e7ce; margin-bottom: 4px;">🏰 Factions</h2>
+      <p class="subtitle" style="text-align: center; margin-bottom: 20px;">Choisissez une faction pour voir ses membres — cliquez sur un membre pour ouvrir sa fiche</p>
+      <div id="factions-grid" class="factions-grid"></div>
+      <div id="faction-detail" class="faction-detail"></div>
+    </section>
+
+    <!-- ONGLET CALCULATEUR DE BUILD -->
+    <div id="calculator-main-content">
+      <section class="card selection-card">
+        <div class="form-group">
+          <label for="character-select"><strong>Choisir un personnage :</strong></label>
+          <select id="character-select" class="styled-select">
+            <option value="">-- Sélectionnez un personnage --</option>
+          </select>
+        </div>
+
+        <div id="skills-selection-section" hidden class="skills-config-box">
+          <h3 style="color: #d4af37; margin-bottom: 4px; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.5px;">Maîtrises & Compétences prioritaires</h3>
+          <p class="helper-text" style="margin-bottom: 15px; color: #aaa; font-size: 0.9rem;">Cochez ou décochez les compétences pour orienter les calculs de synergie :</p>
+          
+          <div style="margin-bottom: 12px;">
+            <h5 style="color: #888; font-size: 0.85rem; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">Armes</h5>
+            <div id="skills-checkboxes-Arme" class="skills-grid" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <h5 style="color: #888; font-size: 0.85rem; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">Sorts</h5>
+            <div id="skills-checkboxes-Sort" class="skills-grid" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <h5 style="color: #888; font-size: 0.85rem; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">Talents</h5>
+            <div id="skills-checkboxes-Talent" class="skills-grid" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+          </div>
+        </div>
+
+        <div id="stats-priority-section" hidden class="skills-config-box" style="margin-top: 15px; border-top: 1px solid #444; padding-top: 15px;">
+          <h3 style="color: #d4af37; margin-bottom: 4px; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.5px;">⚙️ Gestion des Statistiques</h3>
+          <p class="helper-text" style="margin-bottom: 15px; color: #aaa; font-size: 0.9rem;">Cliquez sur un carré de stat pour alterner les priorités : Divine (★★★) ➔ Majeure (★★) ➔ Prioritaire (★) ➔  Neutre ➔ Moins prioritaire (🔻)</p>
+          <div id="stats-priority-grid" class="growths-grid"></div>
+        </div>
+      </section>
+
+      <!-- Panneau d'informations du personnage -->
+      <section id="character-info" class="card" hidden>
+        <div class="char-header-info">
+          <div>
+            <h2 id="char-name">Nom</h2>
+            <span id="char-faction" class="badge-faction">Faction</span>
+          </div>
+          <div id="char-proficiencies" class="proficiencies-container"></div>
+        </div>
+        
+        <div style="margin-top: 20px;">
+          <h4 style="color: #d4af37; font-size: 1.05rem; border-bottom: 1px solid #444; padding-bottom: 6px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Statistiques Actuelles</h4>
+          <div class="growths-grid" id="char-base-growths"></div>
+        </div>
+        
+        <div id="stat-b-container" hidden style="margin-top: 25px; border-top: 1px solid #444; padding-top: 18px;">
+          <h4 style="color: #d4af37; font-size: 1.05rem; border-bottom: 1px solid #444; padding-bottom: 6px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Prévisualisation des Changements</h4>
+          
+          <div id="preview-class-proficiencies" class="proficiencies-container" style="margin-bottom: 15px;"></div>
+
+          <div class="growths-grid" id="char-base-growths-2"></div>
+        </div>
+      </section>
+
+      <!-- ZONE PRINCIPALE EN DEUX COLONNES -->
+      <div class="main-layout" id="main-layout-section">
+        <section id="tree-section" class="tree-container" hidden>
+          <div class="tier-box" id="tier-novice">
+            <h3>1. Classe Novice</h3>
+            <div class="class-list" id="list-Novice"></div>
+          </div>
+
+          <div class="tier-box" id="tier-avancee" hidden>
+            <h3>2. Classe Avancée</h3>
+            <div class="class-list" id="list-Avancée"></div>
+          </div>
+
+          <div class="tier-box" id="tier-elite" hidden>
+            <h3>3. Classe Élite</h3>
+            <div class="class-list" id="list-Élite"></div>
+          </div>
+        </section>
+
+        <!-- Panneau d'analyse détaillée -->
+        <section id="analysis-panel" class="card analysis-card" hidden>
+          <div class="analysis-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+            <div>
+              <span id="detail-tier" class="badge-tier">Tier</span>
+              <h2 id="detail-class-name" style="margin: 4px 0 6px 0;">Nom de la classe</h2>
+              <div id="detail-score" style="display: flex; align-items: center; gap: 8px;"></div>
+            </div>
+            <div>
+              <button id="flip-analysis-btn" class="btn-secondary" style="margin-top: 0; padding: 6px 10px; font-size: 0.75rem; font-weight: normal; background: #222; color: #d4af37; border: 1px solid #d4af37; border-radius: 4px; cursor: pointer;" title="Retourner le panneau pour voir le calcul du rang">
+                🔄 Calcul
+              </button>
+            </div>
+          </div>
+
+          <!-- FACE RECTO -->
+          <div id="analysis-face-front">
+            <p id="detail-verdict" class="verdict-text"></p>
+            
+            <div class="sub-box">
+              <h4>Maîtrises compatibles</h4>
+              <div id="detail-allowed" class="allowed-skills-grid"></div>
+            </div>
+
+            <div class="sub-box">
+              <h4>Progression des Growth Rates</h4>
+              <table class="growth-table">
+                <thead>
+                  <tr>
+                    <th>Statistique</th>
+                    <th>Précédent</th>
+                    <th>Évolution</th>
+                    <th>Total Actuel</th>
+                  </tr>
+                </thead>
+                <tbody id="detail-growths-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- FACE VERSO -->
+          <div id="analysis-face-back" hidden>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #383838; padding-bottom: 10px; margin-bottom: 12px;">
+              <h4 style="margin: 0; color: #d4af37; text-transform: uppercase; font-size: 0.95rem;">🧮 Décomposition Mathématique du Rang</h4>
+              <span id="analysis-back-score-badge"></span>
+            </div>
+            <div id="analysis-back-error-check" style="margin-bottom: 10px;"></div>
+            <table class="growth-table">
+              <thead>
+                <tr>
+                  <th>Critère évalué</th>
+                  <th>Règle appliquée</th>
+                  <th>Détail du calcul</th>
+                  <th>Points</th>
+                </tr>
+              </thead>
+              <tbody id="analysis-breakdown-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- Panneau de Bilan Final -->
+      <section id="final-summary-panel" class="card" hidden>
+        <h2>🏆 Bilan Final du Build</h2>
+        <p class="subtitle">Progression complète de votre personnage à travers les 3 paliers</p>
+        
+        <div class="summary-grid" style="margin-top: 15px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+          <div class="stat-pill"><span>Novice</span><strong id="final-novice">-</strong></div>
+          <div class="stat-pill"><span>Avancée</span><strong id="final-avancee">-</strong></div>
+          <div class="stat-pill"><span>Élite</span><strong id="final-elite">-</strong></div>
+        </div>
+
+        <div class="sub-box" style="margin-top: 20px;">
+          <h4>Maîtrises & Compétences finales</h4>
+          <div id="final-skills-list" class="proficiencies-container" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;"></div>
+        </div>
+
+        <div class="sub-box" style="margin-top: 20px;">
+          <h4>Statistiques Finales cumulées</h4>
+          <div id="final-growths-grid" class="growths-grid"></div>
+        </div>
+
+        <button id="restart-calculator-btn" class="btn-secondary" style="margin-top: 20px;">Recommencer un nouveau build</button>
+      </section>
+
+      <div class="actions-footer">
+        <button id="reset-btn" class="btn-danger" hidden>Réinitialiser la progression</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="script.js"></script>
+  <!-- FICHE PERSONNAGE (fenêtre) -->
+  <div id="char-sheet-modal" class="char-sheet-overlay" hidden>
+    <div class="char-sheet" role="dialog" aria-modal="true" aria-labelledby="char-sheet-name">
+      <button type="button" class="char-sheet-close" id="char-sheet-close" title="Fermer">✕</button>
+      <div id="char-sheet-content"></div>
+    </div>
+  </div>
+</body>
+</html>
