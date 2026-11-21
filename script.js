@@ -12,9 +12,11 @@ const STAT_LABELS = {
 
 let currentChar = null;
 let selectedSkills = [];
+let unfavoredSkills = [];
 let statPriorities = {};
 let selectedClasses = { Novice: null, Avancée: null, Élite: null };
 let validatedClasses = { Novice: null, Avancée: null, Élite: null };
+let validatedEvals = { Novice: null, Avancée: null, Élite: null };
 let previewClass = null;
 let currentEvaluatedClass = null;
 let currentEvaluatedTier = null;
@@ -23,9 +25,13 @@ let isAnalysisFlipped = false;
 let simChar = null;
 let simClass = null;
 let simSkills = [];
+let simUnfavored = [];
 let simPriorities = {};
 
 document.addEventListener("DOMContentLoaded", () => {
+  if (typeof applyLanguageData === "function") applyLanguageData();
+  applyCharacterOverrides();
+  localizeIcons();
   const select = document.getElementById("character-select");
 
   CHARACTERS.forEach((char) => {
@@ -40,7 +46,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!charId) return;
     currentChar = CHARACTERS.find((c) => c.id === charId);
     
-    selectedSkills = [];
+    selectedSkills = [...(currentChar.proficiencies || [])];
+    unfavoredSkills = [...(currentChar.weaknesses || [])];
     statPriorities = {};
     Object.keys(STAT_LABELS).forEach(stat => { statPriorities[stat] = "neutre"; });
 
@@ -56,7 +63,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("reset-btn").addEventListener("click", () => {
     if (!currentChar) return;
-    selectedSkills = [];
+    selectedSkills = [...(currentChar.proficiencies || [])];
+    unfavoredSkills = [...(currentChar.weaknesses || [])];
     statPriorities = {};
     Object.keys(STAT_LABELS).forEach(stat => { statPriorities[stat] = "neutre"; });
     previewClass = null;
@@ -100,6 +108,10 @@ document.addEventListener("DOMContentLoaded", () => {
   initCharacterSheet();
   initComparator();
   initFactionsTab();
+  initCharacterEditor();
+  initClassesTab();
+  initEffectSearch();
+  initBuilds();
 
   // Onglets : bouton -> panneau affiché
   const TABS = [
@@ -107,7 +119,8 @@ document.addEventListener("DOMContentLoaded", () => {
     { btn: "tab-system-btn", panel: "system-panel" },
     { btn: "tab-recruitment-btn", panel: "recruitment-panel" },
     { btn: "tab-compare-btn", panel: "compare-panel" },
-    { btn: "tab-factions-btn", panel: "factions-panel" }
+    { btn: "tab-factions-btn", panel: "factions-panel" },
+    { btn: "tab-classes-btn", panel: "classes-panel" }
   ];
 
   function setActiveTab(activeBtn) {
@@ -138,6 +151,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const el = document.getElementById(btn);
     if (el) el.addEventListener("click", () => window.showTab(btn));
   });
+
+  if (typeof initLanguageSwitch === "function") initLanguageSwitch();
+  if (typeof startPageTranslation === "function") startPageTranslation();
 });
 
 function getSkillObj(skillId) {
@@ -146,6 +162,184 @@ function getSkillObj(skillId) {
 
 function getRankCssClass(rank) {
   return "rank-" + rank.toLowerCase();
+}
+
+// ==========================================
+// MOTEUR DE SCORE (synergie personnage / classe)
+// ==========================================
+const SKILL_MATCH_PTS = 10;      // maîtrise prioritaire présente dans la classe
+const SKILL_MISS_PTS = -5;       // maîtrise prioritaire absente de la classe
+const UNFAVORED_PTS = -5;        // maîtrise « peu adaptée » utilisée par la classe
+const MOVEMENT_SKILLS = ["infantry", "cavalry", "flying"]; // un seul type de déplacement par classe
+
+const STAT_RULES = {
+  divine: { label: "★★★ Divine", up: 1.5, down: 1.5 },
+  majeure: { label: "★★ Majeure", up: 1, down: 1 },
+  prioritaire: { label: "★ Prioritaire", up: 0.5, down: 0.5 },
+  neutre: { label: "• Neutre", up: 0.25, down: 0.25 },
+  "moins-prioritaire": { label: "🔻 Moins prioritaire", up: -1.5, down: 0 }
+};
+
+function fmtPts(v) {
+  const r = Math.round(v * 10) / 10;
+  return `${r > 0 ? "+" : ""}${r}`;
+}
+
+function evaluateSynergy(char, cls, customSkills = null, customPriorities = null, options = {}) {
+  const isCustom = customSkills !== null;
+  const activeSkillsList = isCustom ? customSkills : selectedSkills;
+  const unfavoredList = options.unfavored || (isCustom ? [] : unfavoredSkills);
+  const prioritiesMap = customPriorities !== null ? customPriorities : statPriorities;
+  const baseline = options.currentGrowths || (isCustom ? char.growths : getCurrentGrowths());
+
+  const details = [];
+  let score = 0;
+  const add = (line) => {
+    details.push(line);
+    score += line.pts;
+  };
+
+  // 1. Maîtrises prioritaires
+  const matchingSkills = cls.allowed.filter((s) => activeSkillsList.includes(s));
+  const unmatchingSkills = activeSkillsList.filter((s) => !cls.allowed.includes(s));
+  const selectedMoves = activeSkillsList.filter((s) => MOVEMENT_SKILLS.includes(s));
+  const hasMoveMatch = selectedMoves.some((s) => cls.allowed.includes(s));
+
+  activeSkillsList.forEach((sId) => {
+    const skill = getSkillObj(sId);
+    if (cls.allowed.includes(sId)) {
+      add({ type: "skill", icon: skill.icon, label: `Maîtrise : ${skill.name}`, rule: "Compatible avec la classe", math: `1 × +${SKILL_MATCH_PTS} pts`, pts: SKILL_MATCH_PTS });
+    } else if (MOVEMENT_SKILLS.includes(sId) && hasMoveMatch) {
+      add({ type: "skill", icon: skill.icon, label: `Maîtrise : ${skill.name}`, rule: "Autre type de déplacement choisi", math: "Pas de malus (déplacements exclusifs)", pts: 0 });
+    } else {
+      add({ type: "skill", icon: skill.icon, label: `Maîtrise : ${skill.name}`, rule: "Absente de la classe", math: `1 × ${SKILL_MISS_PTS} pts`, pts: SKILL_MISS_PTS });
+    }
+  });
+
+  // 2. Maîtrises peu adaptées utilisées par la classe
+  unfavoredList.forEach((sId) => {
+    if (!cls.allowed.includes(sId)) return;
+    const skill = getSkillObj(sId);
+    add({ type: "unfav", icon: skill.icon, label: `Peu adapté : ${skill.name}`, rule: "Utilisée par la classe", math: `1 × ${UNFAVORED_PTS} pts`, pts: UNFAVORED_PTS });
+  });
+
+  // 3. Statistiques
+  Object.entries(STAT_LABELS).forEach(([stat, label]) => {
+    const base = char.growths[stat] || 0;
+    const withClass = base + ((cls.growths && cls.growths[stat]) || 0);
+    const current = baseline[stat] ?? base;
+    const evo = withClass - current;
+    const prio = prioritiesMap[stat] || "neutre";
+    const rule = STAT_RULES[prio] || STAT_RULES.neutre;
+
+    let pts = 0;
+    let math = "Aucun changement";
+    if (evo > 0) {
+      pts = evo * rule.up;
+      math = prio === "moins-prioritaire" ? `-(${evo}% × 1.5)` : `${evo}% × ${rule.up}`;
+    } else if (evo < 0) {
+      pts = evo * rule.down;
+      math = prio === "moins-prioritaire" ? "Baisse : 0 pt" : `${evo}% × ${rule.down}`;
+    }
+
+    if (evo !== 0 || prio !== "neutre") {
+      add({ type: "stat", label: `Stat : ${label} (${evo > 0 ? "+" : ""}${evo}%)`, rule: rule.label, math, pts });
+    }
+  });
+
+  score = Math.round(score * 10) / 10;
+  const { rank, verdict } = getRankFromScore(score);
+  return { rank, score, verdict, matchingSkills, unmatchingSkills, details };
+}
+
+// Remplit un tableau de détail du calcul à partir des lignes du moteur
+function renderBreakdownRows(tbody, evalData, emptyText) {
+  tbody.innerHTML = "";
+  const rows = evalData.details;
+  if (!rows.some((r) => r.type === "skill" || r.type === "unfav")) {
+    tbody.innerHTML += `<tr><td colspan="3" style="color: #888;">${emptyText}</td><td class="neu">0 pts</td></tr>`;
+  }
+  let sum = 0;
+  rows.forEach((r) => {
+    sum += r.pts;
+    const p = Math.round(r.pts * 10) / 10;
+    tbody.innerHTML += `
+      <tr class="${r.type === "unfav" ? "row-unfav" : ""}">
+        <td><strong>${r.icon ? `<img src="${r.icon}" alt="" class="skill-icon"> ` : ""}${r.label}</strong></td>
+        <td>${r.rule}</td>
+        <td>${r.math}</td>
+        <td class="${p > 0 ? "pos" : p < 0 ? "neg" : "neu"}">${fmtPts(p)} pts</td>
+      </tr>`;
+  });
+  sum = Math.round(sum * 10) / 10;
+  tbody.innerHTML += `
+    <tr style="background: #222; border-top: 2px solid #d4af37;">
+      <td colspan="3" style="text-align: right; color: #d4af37;"><strong>SCORE TOTAL CALCULÉ :</strong></td>
+      <td style="color: #d4af37; font-size: 1.05rem;"><strong>${fmtPts(sum)} pts</strong></td>
+    </tr>`;
+  return sum;
+}
+
+function renderAnalysisBreakdown(cls, tier) {
+  const evalData = evaluateSynergy(currentChar, cls);
+
+  document.getElementById("analysis-back-score-badge").innerHTML = `
+    <span class="rank-badge ${getRankCssClass(evalData.rank)}">Rang ${evalData.rank}</span>
+    <span class="rank-badge" style="background: #1a1a1a; color: #d4af37; border: 1px solid #d4af37;">${fmtPts(evalData.score)} pts</span>
+  `;
+
+  const sum = renderBreakdownRows(document.getElementById("analysis-breakdown-body"), evalData, "Aucune maîtrise sélectionnée");
+
+  const errorBox = document.getElementById("analysis-back-error-check");
+  errorBox.innerHTML =
+    sum !== evalData.score
+      ? `<div style="background: #2c1515; border: 1px solid #e74c3c; color: #e74c3c; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem;">⚠️ Écart détecté entre le score détaillé (${sum}) et le moteur (${evalData.score}).</div>`
+      : `<div style="background: #15261a; border: 1px solid #27ae60; color: #2ecc71; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem;">✅ Vérification OK : Total cohérent (${evalData.score} pts → Rang ${evalData.rank}).</div>`;
+}
+
+function renderSimBreakdown() {
+  document.getElementById("sim-res-subtitle").textContent = `Palier : ${simClass.tier} | Maîtrises classe : ${simClass.allowed.map((id) => getSkillObj(id).name).join(", ")}`;
+  document.getElementById("sim-res-title").textContent = `${simChar.name} → ${simClass.name}`;
+
+  const evalData = evaluateSynergy(simChar, simClass, simSkills, simPriorities, {
+    unfavored: simUnfavored,
+    currentGrowths: simChar.growths
+  });
+
+  document.getElementById("sim-res-badge").innerHTML = `
+    <span class="rank-badge ${getRankCssClass(evalData.rank)}">Rang ${evalData.rank}</span>
+    <span class="rank-badge" style="background: #1a1a1a; color: #d4af37; border: 1px solid #d4af37;">${fmtPts(evalData.score)} pts</span>
+  `;
+
+  const sum = renderBreakdownRows(document.getElementById("sim-breakdown-body"), evalData, "Aucune maîtrise sélectionnée pour ce test");
+
+  const errorBox = document.getElementById("sim-error-check");
+  const missingStats = Object.keys(STAT_LABELS).filter((k) => typeof simClass.growths[k] !== "number");
+  if (sum !== evalData.score || missingStats.length > 0) {
+    errorBox.innerHTML = `
+      <div style="background: #2c1515; border: 1px solid #e74c3c; color: #e74c3c; padding: 10px 14px; border-radius: 6px; font-size: 0.9rem;">
+        ⚠️ <strong>Anomalie détectée :</strong>
+        ${sum !== evalData.score ? `Écart entre le score détaillé (${sum}) et evaluateSynergy (${evalData.score}). ` : ""}
+        ${missingStats.length > 0 ? `Statistiques manquantes dans data.js pour cette classe : ${missingStats.join(", ")}.` : ""}
+      </div>`;
+  } else {
+    errorBox.innerHTML = `
+      <div style="background: #15261a; border: 1px solid #27ae60; color: #2ecc71; padding: 8px 14px; border-radius: 6px; font-size: 0.85rem;">
+        ✅ <strong>Vérification OK :</strong> Toutes les données de la classe sont valides et le total correspond exactement au moteur de calcul (${evalData.score} pts → Rang ${evalData.rank}).
+      </div>`;
+  }
+}
+
+// État d'une maîtrise : "prio" (prioritaire), "unfav" (peu adapté) ou "none"
+function getSkillState(id, prioList, unfavList) {
+  if (prioList.includes(id)) return "prio";
+  if (unfavList.includes(id)) return "unfav";
+  return "none";
+}
+
+// Cycle au clic : neutre → prioritaire → peu adapté → neutre
+function nextSkillState(state) {
+  return state === "none" ? "prio" : state === "prio" ? "unfav" : "none";
 }
 
 function getRankFromScore(score) {
@@ -163,6 +357,7 @@ function getRankFromScore(score) {
 function resetProgression() {
   selectedClasses = { Novice: null, Avancée: null, Élite: null };
   validatedClasses = { Novice: null, Avancée: null, Élite: null };
+  validatedEvals = { Novice: null, Avancée: null, Élite: null };
   previewClass = null;
   currentEvaluatedClass = null;
   currentEvaluatedTier = null;
@@ -189,33 +384,32 @@ function renderSkillsSelector() {
   if (!section) return;
   section.hidden = false;
 
-  const containerArme = document.getElementById("skills-checkboxes-Arme");
-  const containerSort = document.getElementById("skills-checkboxes-Sort");
-  const containerTalent = document.getElementById("skills-checkboxes-Talent");
-
-  if (containerArme) containerArme.innerHTML = "";
-  if (containerSort) containerSort.innerHTML = "";
-  if (containerTalent) containerTalent.innerHTML = "";
+  const containers = {
+    Arme: document.getElementById("skills-checkboxes-Arme"),
+    Sort: document.getElementById("skills-checkboxes-Sort"),
+    Talent: document.getElementById("skills-checkboxes-Talent")
+  };
+  Object.values(containers).forEach((c) => c && (c.innerHTML = ""));
 
   SKILLS_LIST.forEach((skill) => {
-    const isChecked = selectedSkills.includes(skill.id);
-    const label = document.createElement("label");
-    label.className = `skill-checkbox-label ${isChecked ? "checked" : ""}`;
-
-    label.innerHTML = `
-      <input type="checkbox" value="${skill.id}" ${isChecked ? "checked" : ""}>
+    const state = getSkillState(skill.id, selectedSkills, unfavoredSkills);
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = `skill-checkbox-label skill-state-${state}`;
+    chip.title = "Clic : neutre → prioritaire → peu adapté → neutre";
+    chip.innerHTML = `
+      <span class="skill-state-mark">${state === "prio" ? "✓" : state === "unfav" ? "✕" : ""}</span>
       <span><img src="${skill.icon}" alt="${skill.name}" class="skill-icon"> ${skill.name}</span>
     `;
 
-    const checkbox = label.querySelector("input");
-    checkbox.addEventListener("change", (e) => {
-      if (e.target.checked) {
-        if (!selectedSkills.includes(skill.id)) selectedSkills.push(skill.id);
-        label.classList.add("checked");
-      } else {
-        selectedSkills = selectedSkills.filter(id => id !== skill.id);
-        label.classList.remove("checked");
-      }
+    chip.addEventListener("click", () => {
+      const next = nextSkillState(getSkillState(skill.id, selectedSkills, unfavoredSkills));
+      selectedSkills = selectedSkills.filter((id) => id !== skill.id);
+      unfavoredSkills = unfavoredSkills.filter((id) => id !== skill.id);
+      if (next === "prio") selectedSkills.push(skill.id);
+      if (next === "unfav") unfavoredSkills.push(skill.id);
+
+      renderSkillsSelector();
       const activeTier = !document.getElementById("tier-novice").hidden ? "Novice" :
                          !document.getElementById("tier-avancee").hidden ? "Avancée" : "Élite";
       renderTierList(activeTier);
@@ -227,16 +421,10 @@ function renderSkillsSelector() {
       }
     });
 
-    if (skill.category === "Arme" && containerArme) {
-      containerArme.appendChild(label);
-    } else if (skill.category === "Sort" && containerSort) {
-      containerSort.appendChild(label);
-    } else if (skill.category === "Talent" && containerTalent) {
-      containerTalent.appendChild(label);
-    }
+    const target = containers[skill.category];
+    if (target) target.appendChild(chip);
   });
 }
-
 function renderStatsPrioritySelector() {
   const section = document.getElementById("stats-priority-section");
   if (!section) return;
@@ -517,59 +705,6 @@ function renderCharacterInfo() {
   if (growthsGrid2) growthsGrid2.innerHTML = statsHtmlB;
 }
 
-function evaluateSynergy(char, cls, customSkills = null, customPriorities = null) {
-  let score = 0;
-  const activeSkillsList = customSkills !== null ? customSkills : selectedSkills;
-  const prioritiesMap = customPriorities !== null ? customPriorities : statPriorities;
-
-  const matchingSkills = cls.allowed.filter(s => activeSkillsList.includes(s));
-  const unmatchingSkills = activeSkillsList.filter(s => !cls.allowed.includes(s));
-
-  score += matchingSkills.length * 10;
-  score -= unmatchingSkills.length * 5;
-
-  const currentGrowthsBeforePreview = getCurrentGrowths();
-
-  Object.entries(STAT_LABELS).forEach(([stat, label]) => {
-    const baseCharStat = char.growths[stat] || 0;
-    const classBonus = cls.growths[stat] || 0;
-    const statWithPreview = baseCharStat + classBonus;
-    const currentTotalVal = currentGrowthsBeforePreview[stat] || baseCharStat;
-    
-    const evolutionVal = statWithPreview - currentTotalVal;
-    const priority = prioritiesMap[stat] || "neutre";
-
-    if (priority === "divine") {
-      if (evolutionVal !== 0) {
-        score += evolutionVal * 1.5;
-      }
-    } else if (priority === "majeure") {
-      if (evolutionVal !== 0) {
-        score += evolutionVal * 1;
-      }
-    } else if (priority === "prioritaire") {
-      if (evolutionVal !== 0) {
-        score += evolutionVal * 0.5;
-      }
-    } else if (priority === "moins-prioritaire") {
-      if (evolutionVal < 0) {
-        score += 0;
-      } else if (evolutionVal > 0) {
-        score -= (evolutionVal * 1.5);
-      }
-    } else if (priority === "neutre") {
-      if (evolutionVal > 0) {
-        score += evolutionVal * 0.25;
-      } 
-    }
-  });
-
-  score = Math.round(score * 10) / 10;
-
-  const { rank, verdict } = getRankFromScore(score);
-  return { rank, score, verdict, matchingSkills, unmatchingSkills };
-}
-
 function renderTierList(tier) {
   const container = document.getElementById(`list-${tier}`);
   container.innerHTML = "";
@@ -613,15 +748,24 @@ function renderTierList(tier) {
   }
 
   confirmBtn.onclick = () => {
+    let warn = document.getElementById(`confirm-warning-${tier}`);
     if (!selectedClasses[tier]) {
-      alert("Veuillez d'abord sélectionner une classe dans la liste !");
+      if (!warn) {
+        warn = document.createElement("p");
+        warn.id = `confirm-warning-${tier}`;
+        warn.className = "confirm-warning";
+        confirmBtn.insertAdjacentElement("afterend", warn);
+      }
+      warn.textContent = "⚠️ Sélectionnez d'abord une classe dans la liste.";
       return;
     }
+    if (warn) warn.remove();
     handleTierValidation(tier);
   };
 }
 
 function handleTierValidation(tier) {
+  validatedEvals[tier] = evaluateSynergy(currentChar, selectedClasses[tier]);
   validatedClasses[tier] = selectedClasses[tier];
   previewClass = null;
 
@@ -760,9 +904,10 @@ function renderAnalysis(cls, evalData, tier) {
   cls.allowed.forEach((skillId) => {
     const skill = getSkillObj(skillId);
     const isMatch = activeSkillsList.includes(skillId);
+    const isUnfav = unfavoredSkills.includes(skillId);
     const chip = document.createElement("div");
-    chip.className = `skill-chip ${isMatch ? "match" : ""}`;
-    chip.innerHTML = `<img src="${skill.icon}" alt="${skill.name}" class="skill-icon"> ${skill.name}${isMatch ? " ★" : ""}`;
+    chip.className = `skill-chip ${isMatch ? "match" : ""} ${isUnfav ? "unfav" : ""}`;
+    chip.innerHTML = `<img src="${skill.icon}" alt="${skill.name}" class="skill-icon"> ${skill.name}${isMatch ? " ★" : ""}${isUnfav ? " — peu adapté" : ""}`;
     leftGrid.appendChild(chip);
   });
   leftCol.appendChild(leftGrid);
@@ -784,7 +929,7 @@ function renderAnalysis(cls, evalData, tier) {
       const techBadge = document.createElement("div");
       techBadge.className = "tooltip-badge";
       techBadge.innerHTML = `
-        <img src="${tech.icon}" alt="${tech.name}" class="skill-icon"> <span>${tech.name}</span>
+        <img src="${tech.icon}" alt="${tech.name}" class="skill-icon" onerror="this.style.visibility='hidden'"> <span>${tech.name}</span>
         <div class="tooltip-content">${tech.desc}</div>
       `;
       rightGrid.appendChild(techBadge);
@@ -807,7 +952,7 @@ function renderAnalysis(cls, evalData, tier) {
     const masterBadge = document.createElement("div");
     masterBadge.className = "tooltip-badge master-badge";
     masterBadge.innerHTML = `
-      <img src="${cls.masterTech.icon}" alt="${cls.masterTech.name}" class="skill-icon"> <span> ${cls.masterTech.name}</span>
+      <img src="${cls.masterTech.icon}" alt="${cls.masterTech.name}" class="skill-icon" onerror="this.style.visibility='hidden'"> <span> ${cls.masterTech.name}</span>
       <div class="tooltip-content">${cls.masterTech.desc}</div>
     `;
     rightGrid.appendChild(masterBadge);
@@ -850,161 +995,13 @@ function renderAnalysis(cls, evalData, tier) {
     `;
   });
 
+  renderClassCompare(cls, tier);
+
   if (isAnalysisFlipped) {
     renderAnalysisBreakdown(cls, tier);
   }
   
   //panel.scrollIntoView({ behavior: "smooth", block: "nearest" }); //(Si jamis il ya probleme avec le gestion des statistique)
-}
-
-function renderAnalysisBreakdown(cls, tier) {
-  const evalData = evaluateSynergy(currentChar, cls);
-
-  const badgeEl = document.getElementById("analysis-back-score-badge");
-  badgeEl.innerHTML = `
-    <span class="rank-badge ${getRankCssClass(evalData.rank)}">Rang ${evalData.rank}</span>
-    <span class="rank-badge" style="background: #1a1a1a; color: #d4af37; border: 1px solid #d4af37;">${evalData.score > 0 ? '+' : ''}${evalData.score} pts</span>
-  `;
-
-  const tbody = document.getElementById("analysis-breakdown-body");
-  tbody.innerHTML = "";
-
-  let calculatedSum = 0;
-  const activeSkillsList = [...selectedSkills];
-
-  activeSkillsList.forEach((sId) => {
-    const skillObj = getSkillObj(sId);
-    const skillName = skillObj.name;
-    const isAllowed = cls.allowed.includes(sId);
-    const pts = isAllowed ? 10 : -5;
-    calculatedSum += pts;
-
-    tbody.innerHTML += `
-      <tr>
-        <td><strong><img src="${skillObj.icon}" alt="${skillName}" class="skill-icon"> Maîtrise : ${skillName}</strong></td>
-        <td>${isAllowed ? "Compatible avec la classe" : "Absente de la classe"}</td>
-        <td>${isAllowed ? "1 × +10 pts" : "1 × -5 pts"}</td>
-        <td class="${pts >= 0 ? 'pos' : 'neg'}">${pts > 0 ? '+' : ''}${pts} pts</td>
-      </tr>
-    `;
-  });
-
-  if (activeSkillsList.length === 0) {
-    tbody.innerHTML += `
-      <tr>
-        <td colspan="3" style="color: #888;">Aucune maîtrise sélectionnée</td>
-        <td class="neu">0 pts</td>
-      </tr>
-    `;
-  }
-
-  const currentGrowthsBeforePreview = getCurrentGrowths();
-
-  Object.entries(STAT_LABELS).forEach(([statKey, label]) => {
-    const baseCharStat = currentChar.growths[statKey] || 0;
-    const classBonus = cls.growths[statKey] || 0;
-    const statWithPreview = baseCharStat + classBonus;
-    const currentTotalVal = currentGrowthsBeforePreview[statKey] || baseCharStat;
-    const evolutionVal = statWithPreview - currentTotalVal;
-
-    const prio = statPriorities[statKey] || "neutre";
-    let pts = 0;
-    let ruleDesc = "";
-    let mathDesc = "";
-
-    if (prio === "divine") {
-      if (evolutionVal !== 0) {
-        pts = evolutionVal * 1.5;
-        ruleDesc = "★★★ Divine";
-        mathDesc = `${evolutionVal}% × 1.5`;
-      } else {
-        ruleDesc = "★★★ Divine (0%)";
-        mathDesc = "Aucun changement";
-      }
-    } else if (prio === "majeure") {
-      if (evolutionVal !== 0) {
-        pts = evolutionVal * 1;
-        ruleDesc = "★★ Majeure";
-        mathDesc = `${evolutionVal}% × 1`;
-      } else {
-        ruleDesc = "★★ Majeure (0%)";
-        mathDesc = "Aucun changement";
-      }
-    } else if (prio === "prioritaire") {
-      if (evolutionVal !== 0) {
-        pts = evolutionVal * 0.5;
-        ruleDesc = "★ Prioritaire";
-        mathDesc = `${evolutionVal}% × 0.5`;
-      } else {
-        ruleDesc = "★ Prioritaire (0%)";
-        mathDesc = "Aucun changement";
-      }
-    } else if (prio === "moins-prioritaire") {
-      if (evolutionVal < 0) {
-        pts = 0;
-        ruleDesc = "🔻 Moins prioritaire (Baisse)";
-        mathDesc = "0 pt accordé";
-      } else if (evolutionVal > 0) {
-        pts = -(evolutionVal * 1.5);
-        ruleDesc = "🔻 Moins prioritaire (Hausse)";
-        mathDesc = `-(${evolutionVal}% × 1.5)`;
-      } else {
-        ruleDesc = "🔻 Moins prioritaire (0%)";
-        mathDesc = "Aucun changement";
-      }
-    } else {
-      if (evolutionVal > 0) {
-        pts = evolutionVal * 0.25;
-        ruleDesc = "• Neutre (Hausse)";
-        mathDesc = `${evolutionVal}% × 0.25`;
-      } else if (evolutionVal < 0) {
-        pts = 0;
-        ruleDesc = "• Neutre (Baisse)";
-        mathDesc = "Aucun malus en neutre";
-      } else {
-        ruleDesc = "• Neutre (0%)";
-        mathDesc = "Aucun changement";
-      }
-    }
-
-    calculatedSum += pts;
-
-    if (evolutionVal !== 0 || prio !== "neutre") {
-      const ptsFormatted = Math.round(pts * 10) / 10;
-      tbody.innerHTML += `
-        <tr>
-          <td><strong>Stat : ${label}</strong> (${evolutionVal > 0 ? '+' : ''}${evolutionVal}%)</td>
-          <td>${ruleDesc}</td>
-          <td>${mathDesc}</td>
-          <td class="${ptsFormatted > 0 ? 'pos' : (ptsFormatted < 0 ? 'neg' : 'neu')}">${ptsFormatted > 0 ? '+' : ''}${ptsFormatted} pts</td>
-        </tr>
-      `;
-    }
-  });
-
-  calculatedSum = Math.round(calculatedSum * 10) / 10;
-
-  tbody.innerHTML += `
-    <tr style="background: #222; border-top: 2px solid #d4af37;">
-      <td colspan="3" style="text-align: right; color: #d4af37;"><strong>SCORE TOTAL CALCULÉ :</strong></td>
-      <td style="color: #d4af37; font-size: 1.05rem;"><strong>${calculatedSum > 0 ? '+' : ''}${calculatedSum} pts</strong></td>
-    </tr>
-  `;
-
-  const errorBox = document.getElementById("analysis-back-error-check");
-  if (calculatedSum !== evalData.score) {
-    errorBox.innerHTML = `
-      <div style="background: #2c1515; border: 1px solid #e74c3c; color: #e74c3c; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem;">
-        ⚠️ Écart détecté entre le score détaillé (${calculatedSum}) et le moteur (${evalData.score}).
-      </div>
-    `;
-  } else {
-    errorBox.innerHTML = `
-      <div style="background: #15261a; border: 1px solid #27ae60; color: #2ecc71; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem;">
-        ✅ Vérification OK : Total cohérent (${evalData.score} pts → Rang ${evalData.rank}).
-      </div>
-    `;
-  }
 }
 
 function initSimulator() {
@@ -1029,7 +1026,8 @@ function initSimulator() {
   simCharSelect.addEventListener("change", (e) => {
     simChar = CHARACTERS.find(c => c.id === e.target.value) || null;
     if (simChar) {
-      simSkills = [];
+      simSkills = [...(simChar.proficiencies || [])];
+      simUnfavored = [...(simChar.weaknesses || [])];
       simPriorities = {};
       Object.keys(STAT_LABELS).forEach(s => { simPriorities[s] = "neutre"; });
     }
@@ -1069,28 +1067,22 @@ function renderSimControls() {
   skillsContainer.innerHTML = "";
 
   SKILLS_LIST.forEach((skill) => {
-    const active = simSkills.includes(skill.id);
+    const state = getSkillState(skill.id, simSkills, simUnfavored);
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.style.padding = "5px 10px";
-    btn.style.borderRadius = "4px";
-    btn.style.cursor = "pointer";
-    btn.style.fontSize = "0.85rem";
-    btn.style.border = active ? "1px solid #d4af37" : "1px solid #444";
-    btn.style.background = active ? "#2a2211" : "#1e1e1e";
-    btn.style.color = active ? "#d4af37" : "#888";
-
+    btn.className = `skill-checkbox-label skill-state-${state}`;
+    btn.title = "Clic : neutre → prioritaire → peu adapté → neutre";
     btn.innerHTML = `
-      <img src="${skill.icon}" alt="${skill.name}" class="skill-icon">
-      <span>${active ? "✓ " : ""}${skill.name}</span>
+      <span class="skill-state-mark">${state === "prio" ? "✓" : state === "unfav" ? "✕" : ""}</span>
+      <span><img src="${skill.icon}" alt="${skill.name}" class="skill-icon"> ${skill.name}</span>
     `;
 
     btn.addEventListener("click", () => {
-      if (simSkills.includes(skill.id)) {
-        simSkills = simSkills.filter(id => id !== skill.id);
-      } else {
-        simSkills.push(skill.id);
-      }
+      const next = nextSkillState(getSkillState(skill.id, simSkills, simUnfavored));
+      simSkills = simSkills.filter((id) => id !== skill.id);
+      simUnfavored = simUnfavored.filter((id) => id !== skill.id);
+      if (next === "prio") simSkills.push(skill.id);
+      if (next === "unfav") simUnfavored.push(skill.id);
       updateSimulatorUI();
     });
     skillsContainer.appendChild(btn);
@@ -1147,156 +1139,6 @@ function renderSimControls() {
 
     statsContainer.appendChild(pill);
   });
-}
-
-function renderSimBreakdown() {
-  document.getElementById("sim-res-subtitle").textContent = `Palier : ${simClass.tier} | Maîtrises classe : ${simClass.allowed.map(id => getSkillObj(id).name).join(", ")}`;
-  document.getElementById("sim-res-title").textContent = `${simChar.name} → ${simClass.name}`;
-
-  const evalData = evaluateSynergy(simChar, simClass, simSkills, simPriorities);
-
-  const badgeEl = document.getElementById("sim-res-badge");
-  badgeEl.innerHTML = `
-    <span class="rank-badge ${getRankCssClass(evalData.rank)}">Rang ${evalData.rank}</span>
-    <span class="rank-badge" style="background: #1a1a1a; color: #d4af37; border: 1px solid #d4af37;">${evalData.score > 0 ? '+' : ''}${evalData.score} pts</span>
-  `;
-
-  const tbody = document.getElementById("sim-breakdown-body");
-  tbody.innerHTML = "";
-
-  let calculatedSum = 0;
-
-  simSkills.forEach((sId) => {
-    const skillName = getSkillObj(sId).name;
-    const isAllowed = simClass.allowed.includes(sId);
-    const pts = isAllowed ? 10 : -5;
-    calculatedSum += pts;
-
-    tbody.innerHTML += `
-      <tr>
-        <td><strong>Maîtrise : ${skillName}</strong></td>
-        <td>${isAllowed ? "Compatible avec la classe" : "Absente de la classe"}</td>
-        <td>${isAllowed ? "1 × +10 pts" : "1 × -5 pts"}</td>
-        <td class="${pts >= 0 ? 'pos' : 'neg'}">${pts > 0 ? '+' : ''}${pts} pts</td>
-      </tr>
-    `;
-  });
-
-  if (simSkills.length === 0) {
-    tbody.innerHTML += `
-      <tr>
-        <td colspan="3" style="color: #888;">Aucune maîtrise sélectionnée pour ce test</td>
-        <td class="neu">0 pts</td>
-      </tr>
-    `;
-  }
-
-  Object.entries(STAT_LABELS).forEach(([statKey, label]) => {
-    const bonusVal = simClass.growths[statKey] || 0;
-    const evolutionVal = bonusVal;
-
-    const prio = simPriorities[statKey] || "neutre";
-    let pts = 0;
-    let ruleDesc = "";
-    let mathDesc = "";
-
-    if (prio === "divine") {
-      if (evolutionVal !== 0) {
-        pts = evolutionVal * 1.5;
-        ruleDesc = "★★★ Divine";
-        mathDesc = `${evolutionVal}% × 1.5`;
-      } else {
-        ruleDesc = "★★★ Divine (0%)";
-        mathDesc = "Aucun changement";
-      }
-    } else if (prio === "majeure") {
-      if (evolutionVal !== 0) {
-        pts = evolutionVal * 1;
-        ruleDesc = "★★ Majeure";
-        mathDesc = `${evolutionVal}% × 1`;
-      } else {
-        ruleDesc = "★★ Majeure (0%)";
-        mathDesc = "Aucun changement";
-      }
-    } else if (prio === "prioritaire") {
-      if (evolutionVal !== 0) {
-        pts = evolutionVal * 0.5;
-        ruleDesc = "★ Prioritaire";
-        mathDesc = `${evolutionVal}% × 0.5`;
-      } else {
-        ruleDesc = "★ Prioritaire (0%)";
-        mathDesc = "Aucun changement";
-      }
-    } else if (prio === "moins-prioritaire") {
-      if (evolutionVal < 0) {
-        pts = 0;
-        ruleDesc = "🔻 Moins prioritaire (Baisse)";
-        mathDesc = "0 pt accordé";
-      } else if (evolutionVal > 0) {
-        pts = -(evolutionVal * 1.5);
-        ruleDesc = "🔻 Moins prioritaire (Hausse)";
-        mathDesc = `-(${evolutionVal}% × 1.5)`;
-      } else {
-        ruleDesc = "🔻 Moins prioritaire (0%)";
-        mathDesc = "Aucun changement";
-      }
-    } else {
-      if (evolutionVal > 0) {
-        pts = evolutionVal * 0.25;
-        ruleDesc = "• Neutre (Hausse)";
-        mathDesc = `${evolutionVal}% × 0.25`;
-      } else if (evolutionVal < 0) {
-        pts = 0;
-        ruleDesc = "• Neutre (Baisse)";
-        mathDesc = "Aucun malus en neutre";
-      } else {
-        ruleDesc = "• Neutre (0%)";
-        mathDesc = "Aucun changement";
-      }
-    }
-
-    calculatedSum += pts;
-
-    if (evolutionVal !== 0 || prio !== "neutre") {
-      const ptsFormatted = Math.round(pts * 10) / 10;
-      tbody.innerHTML += `
-        <tr>
-          <td><strong>Stat : ${label}</strong> (${evolutionVal > 0 ? '+' : ''}${evolutionVal}%)</td>
-          <td>${ruleDesc}</td>
-          <td>${mathDesc}</td>
-          <td class="${ptsFormatted > 0 ? 'pos' : (ptsFormatted < 0 ? 'neg' : 'neu')}">${ptsFormatted > 0 ? '+' : ''}${ptsFormatted} pts</td>
-        </tr>
-      `;
-    }
-  });
-
-  calculatedSum = Math.round(calculatedSum * 10) / 10;
-
-  tbody.innerHTML += `
-    <tr style="background: #222; border-top: 2px solid #d4af37;">
-      <td colspan="3" style="text-align: right; color: #d4af37;"><strong>SCORE TOTAL CALCULÉ :</strong></td>
-      <td style="color: #d4af37; font-size: 1.05rem;"><strong>${calculatedSum > 0 ? '+' : ''}${calculatedSum} pts</strong></td>
-    </tr>
-  `;
-
-  const errorBox = document.getElementById("sim-error-check");
-  const missingStats = Object.keys(STAT_LABELS).filter(k => typeof simClass.growths[k] !== "number");
-
-  if (calculatedSum !== evalData.score || missingStats.length > 0) {
-    errorBox.innerHTML = `
-      <div style="background: #2c1515; border: 1px solid #e74c3c; color: #e74c3c; padding: 10px 14px; border-radius: 6px; font-size: 0.9rem;">
-        ⚠️ <strong>Anomalie détectée :</strong> 
-        ${calculatedSum !== evalData.score ? `Écart entre le score détaillé (${calculatedSum}) et evaluateSynergy (${evalData.score}). ` : ""}
-        ${missingStats.length > 0 ? `Statistiques manquantes dans data.js pour cette classe : ${missingStats.join(", ")}.` : ""}
-      </div>
-    `;
-  } else {
-    errorBox.innerHTML = `
-      <div style="background: #15261a; border: 1px solid #27ae60; color: #2ecc71; padding: 8px 14px; border-radius: 6px; font-size: 0.85rem;">
-        ✅ <strong>Vérification OK :</strong> Toutes les données de la classe sont valides et le total correspond exactement au moteur de calcul (${evalData.score} pts → Rang ${evalData.rank}).
-      </div>
-    `;
-  }
 }
 
 // ==========================================
@@ -1807,6 +1649,37 @@ function renderStatBars(charObj, mode, suffix) {
     .join("");
 }
 
+// Compétences personnelles d'un personnage (PERSONAL_SKILLS dans data.js)
+function getWhenCss(when) {
+  if (when === "Base") return "when-base";
+  if (when === "Overblaze") return "when-over";
+  if (/\?/.test(when)) return "when-unk";
+  return "when-niv";
+}
+
+function renderPersonalSkills(charId) {
+  const list = (typeof PERSONAL_SKILLS !== "undefined" && PERSONAL_SKILLS[charId]) || [];
+  if (!list.length) return "";
+  const rows = list
+    .map(
+      (sk) => `
+        <div class="personal-skill">
+          <img src="${sk.icon}" alt="" class="personal-skill-icon" loading="lazy" onerror="this.style.visibility='hidden'">
+          <span class="personal-skill-when ${getWhenCss(sk.when)}">${sk.when}</span>
+          <div class="personal-skill-text">
+            <span class="personal-skill-name">${sk.name}</span>
+            <span class="personal-skill-desc">${sk.desc}</span>
+          </div>
+        </div>`
+    )
+    .join("");
+  return `
+    <div class="sheet-block">
+      <h4>Compétences personnelles</h4>
+      <div class="personal-skills-list">${rows}</div>
+    </div>`;
+}
+
 function openCharacterSheet(charId) {
   const charObj = CHARACTERS.find((c) => c.id === charId);
   const modal = document.getElementById("char-sheet-modal");
@@ -1821,6 +1694,13 @@ function openCharacterSheet(charId) {
     .map((pId) => {
       const skill = getSkillObj(pId);
       return `<span class="sheet-prof">${skill.icon ? `<img src="${skill.icon}" alt="" class="skill-icon">` : ""}${skill.name}</span>`;
+    })
+    .join("");
+
+  const weakHtml = (charObj.weaknesses || [])
+    .map((pId) => {
+      const skill = getSkillObj(pId);
+      return `<span class="sheet-prof weak">${skill.icon ? `<img src="${skill.icon}" alt="" class="skill-icon">` : ""}${skill.name}</span>`;
     })
     .join("");
 
@@ -1844,6 +1724,7 @@ function openCharacterSheet(charId) {
         <h2 id="char-sheet-name">${charObj.name}</h2>
         <button type="button" class="badge-faction sheet-faction-link ${factionCss}" title="Voir la faction">${charObj.faction}</button>
         <div class="sheet-profs">${profsHtml}</div>
+        ${weakHtml ? `<div class="sheet-profs sheet-weak"><span class="sheet-weak-label">Peu adapté :</span>${weakHtml}</div>` : ""}
       </div>
     </div>
 
@@ -1858,12 +1739,17 @@ function openCharacterSheet(charId) {
       </div>
     </div>
 
+    ${renderPersonalSkills(charObj.id)}
+
+    ${renderCharacterBuilds(charObj.id)}
+
     <div class="sheet-block">
       <h4>Recrutement par route</h4>
       <div class="sheet-routes">${routesHtml}</div>
     </div>
 
     <div class="sheet-actions">
+      <button type="button" class="sheet-compare-btn" id="sheet-edit-btn">✏️ Modifier les maîtrises</button>
       <button type="button" class="sheet-compare-btn" id="sheet-compare-btn">⚖️ Comparer ce personnage</button>
     </div>
   `;
@@ -1871,6 +1757,18 @@ function openCharacterSheet(charId) {
   content.querySelector(".sheet-faction-link").addEventListener("click", () => {
     closeCharacterSheet();
     openFactionPage(getFactionKey(charObj.faction));
+  });
+
+  content.querySelectorAll(".build-delete-btn").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      deleteBuild(btn.dataset.buildId);
+      openCharacterSheet(charObj.id);
+    })
+  );
+
+  content.querySelector("#sheet-edit-btn").addEventListener("click", () => {
+    closeCharacterSheet();
+    openCharacterEditor(charObj.id, true);
   });
 
   content.querySelector("#sheet-compare-btn").addEventListener("click", () => {
@@ -2225,7 +2123,19 @@ function selectFaction(key, scroll) {
       <div class="faction-member-profs">${profs}</div>
     `;
     card.addEventListener("click", () => openCharacterSheet(c.id));
-    membersGrid.appendChild(card);
+
+    const wrap = document.createElement("div");
+    wrap.className = "faction-member-wrap";
+    wrap.appendChild(card);
+
+    if (isCharacterEdited(c.id)) {
+      const tag = document.createElement("span");
+      tag.className = "member-edited-tag";
+      tag.textContent = "Modifié";
+      wrap.appendChild(tag);
+    }
+
+    membersGrid.appendChild(wrap);
   });
 
   if (scroll) detail.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2234,4 +2144,664 @@ function selectFaction(key, scroll) {
 function openFactionPage(key) {
   if (typeof window.showTab === "function") window.showTab("tab-factions-btn");
   selectFaction(key, true);
+}
+
+
+// ==========================================
+// ÉDITION DES MAÎTRISES & COMPÉTENCES D'UN PERSONNAGE
+// (enregistrées dans ce navigateur, appliquées à tout le site)
+// ==========================================
+const CHAR_OVERRIDES_KEY = "fefw_char_overrides";
+const DEFAULT_CHAR_SKILLS = {};
+let editorCharId = null;
+let editorProfs = [];
+let editorWeak = [];
+
+function loadCharOverrides() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CHAR_OVERRIDES_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveCharOverrides(overrides) {
+  try {
+    localStorage.setItem(CHAR_OVERRIDES_KEY, JSON.stringify(overrides));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Garde les valeurs de data.js, puis applique les modifications enregistrées
+function applyCharacterOverrides() {
+  const overrides = loadCharOverrides();
+  CHARACTERS.forEach((c) => {
+    if (!DEFAULT_CHAR_SKILLS[c.id]) {
+      DEFAULT_CHAR_SKILLS[c.id] = {
+        proficiencies: [...(c.proficiencies || [])],
+        weaknesses: [...(c.weaknesses || [])]
+      };
+    }
+    const o = overrides[c.id];
+    const d = DEFAULT_CHAR_SKILLS[c.id];
+    c.proficiencies = o && Array.isArray(o.proficiencies) ? [...o.proficiencies] : [...d.proficiencies];
+    c.weaknesses = o && Array.isArray(o.weaknesses) ? [...o.weaknesses] : [...d.weaknesses];
+  });
+}
+
+function isCharacterEdited(charId) {
+  return Boolean(loadCharOverrides()[charId]);
+}
+
+function sortSkillIds(ids) {
+  const order = SKILLS_LIST.map((sk) => sk.id);
+  return [...ids].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+}
+
+function initCharacterEditor() {
+  const modal = document.getElementById("char-edit-modal");
+  if (!modal) return;
+  document.getElementById("char-edit-close").addEventListener("click", closeCharacterEditor);
+  document.getElementById("char-edit-cancel").addEventListener("click", closeCharacterEditor);
+  document.getElementById("char-edit-save").addEventListener("click", saveCharacterEditor);
+  document.getElementById("char-edit-reset").addEventListener("click", () => {
+    const d = DEFAULT_CHAR_SKILLS[editorCharId];
+    editorProfs = [...d.proficiencies];
+    editorWeak = [...d.weaknesses];
+    renderCharacterEditor();
+  });
+  document.getElementById("char-edit-copy").addEventListener("click", copyCharacterEditorCode);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeCharacterEditor();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.hidden) closeCharacterEditor();
+  });
+}
+
+let editorFromSheet = false;
+
+function openCharacterEditor(charId, fromSheet = false) {
+  const c = CHARACTERS.find((x) => x.id === charId);
+  if (!c) return;
+  editorCharId = charId;
+  editorFromSheet = fromSheet;
+  editorProfs = [...(c.proficiencies || [])];
+  editorWeak = [...(c.weaknesses || [])];
+  document.getElementById("char-edit-portrait").src = c.portrait || "images/default.png";
+  document.getElementById("char-edit-name").textContent = c.name;
+  document.getElementById("char-edit-message").textContent = "";
+  document.getElementById("char-edit-code").hidden = true;
+  renderCharacterEditor();
+  document.getElementById("char-edit-modal").hidden = false;
+  document.body.classList.add("sheet-open");
+}
+
+function closeCharacterEditor() {
+  document.getElementById("char-edit-modal").hidden = true;
+  document.body.classList.remove("sheet-open");
+  if (editorFromSheet && editorCharId) {
+    editorFromSheet = false;
+    openCharacterSheet(editorCharId);
+  }
+}
+
+function renderCharacterEditor() {
+  const groups = { Arme: "Armes", Sort: "Sorts", Talent: "Talents" };
+  const box = document.getElementById("char-edit-skills");
+  box.innerHTML = "";
+  Object.entries(groups).forEach(([cat, title]) => {
+    const skills = SKILLS_LIST.filter((sk) => sk.category === cat);
+    if (!skills.length) return;
+    const section = document.createElement("div");
+    section.className = "char-edit-group";
+    section.innerHTML = `<h5>${title}</h5><div class="skills-grid"></div>`;
+    const grid = section.querySelector(".skills-grid");
+    skills.forEach((skill) => {
+      const state = getSkillState(skill.id, editorProfs, editorWeak);
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = `skill-checkbox-label skill-state-${state}`;
+      chip.title = "Clic : neutre → point fort → peu adapté → neutre";
+      chip.innerHTML = `
+        <span class="skill-state-mark">${state === "prio" ? "✓" : state === "unfav" ? "✕" : ""}</span>
+        <span><img src="${skill.icon}" alt="" class="skill-icon"> ${skill.name}</span>`;
+      chip.addEventListener("click", () => {
+        const next = nextSkillState(getSkillState(skill.id, editorProfs, editorWeak));
+        editorProfs = editorProfs.filter((id) => id !== skill.id);
+        editorWeak = editorWeak.filter((id) => id !== skill.id);
+        if (next === "prio") editorProfs.push(skill.id);
+        if (next === "unfav") editorWeak.push(skill.id);
+        renderCharacterEditor();
+      });
+      grid.appendChild(chip);
+    });
+    box.appendChild(section);
+  });
+
+  const d = DEFAULT_CHAR_SKILLS[editorCharId];
+  const same = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+  const isDefault = same(editorProfs, d.proficiencies) && same(editorWeak, d.weaknesses);
+  document.getElementById("char-edit-reset").disabled = isDefault;
+}
+
+function saveCharacterEditor() {
+  const c = CHARACTERS.find((x) => x.id === editorCharId);
+  if (!c) return;
+  const overrides = loadCharOverrides();
+  const d = DEFAULT_CHAR_SKILLS[c.id];
+  const profs = sortSkillIds(editorProfs);
+  const weak = sortSkillIds(editorWeak);
+  const same = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+
+  if (same(profs, d.proficiencies) && same(weak, d.weaknesses)) {
+    delete overrides[c.id];
+  } else {
+    overrides[c.id] = { proficiencies: profs, weaknesses: weak };
+  }
+
+  if (!saveCharOverrides(overrides)) {
+    document.getElementById("char-edit-message").textContent = "⚠️ Impossible d'enregistrer dans ce navigateur.";
+    return;
+  }
+
+  c.proficiencies = profs;
+  c.weaknesses = weak;
+  refreshAfterCharacterEdit(c.id);
+  closeCharacterEditor();
+}
+
+// Met à jour les parties du site qui affichent ce personnage
+function refreshAfterCharacterEdit(charId) {
+  if (typeof selectedFaction !== "undefined" && selectedFaction) selectFaction(selectedFaction, false);
+  if (typeof renderComparator === "function") renderComparator();
+
+  const select = document.getElementById("character-select");
+  if (currentChar && currentChar.id === charId && select) {
+    select.dispatchEvent(new Event("change"));
+  }
+  if (typeof simChar !== "undefined" && simChar && simChar.id === charId) {
+    simSkills = [...(simChar.proficiencies || [])];
+    simUnfavored = [...(simChar.weaknesses || [])];
+    updateSimulatorUI();
+  }
+}
+
+// Texte à coller dans data.js pour rendre la modification définitive
+function copyCharacterEditorCode() {
+  const code = `    proficiencies: ${JSON.stringify(sortSkillIds(editorProfs)).replace(/","/g, '", "')},\n    weaknesses: ${JSON.stringify(sortSkillIds(editorWeak)).replace(/","/g, '", "')}`;
+  const area = document.getElementById("char-edit-code");
+  area.value = code;
+  area.hidden = false;
+  area.select();
+  const msg = document.getElementById("char-edit-message");
+  const done = () => (msg.textContent = "Copié ! Remplace ces deux lignes dans le personnage, dans data.js.");
+  try {
+    navigator.clipboard.writeText(code).then(done, () => (msg.textContent = "Sélectionne le texte ci-dessous et copie-le (Ctrl+C)."));
+  } catch (e) {
+    msg.textContent = "Sélectionne le texte ci-dessous et copie-le (Ctrl+C).";
+  }
+}
+
+// ==========================================
+// ICÔNES DES COMPÉTENCES : copie locale, repli sur le Fire Emblem Wiki
+// ==========================================
+const WIKI_ICON_BASE = "https://cdn.fireemblemwiki.org/";
+const LOCAL_ICON_DIR = "images/skills/";
+const ICON_FALLBACKS = {};
+
+function localIconName(remoteUrl) {
+  const file = decodeURIComponent(remoteUrl.split("/").pop());
+  return file.replace(/\+/g, "_plus").replace(/['’,]/g, "");
+}
+
+function toLocalIcon(url) {
+  if (!url || !url.startsWith(WIKI_ICON_BASE)) return url;
+  const local = LOCAL_ICON_DIR + localIconName(url);
+  ICON_FALLBACKS[local] = url;
+  return local;
+}
+
+// Remplace les adresses du wiki par images/skills/… ; si le fichier local manque, l'image retombe sur le wiki
+function localizeIcons() {
+  if (typeof PERSONAL_SKILLS !== "undefined") {
+    Object.values(PERSONAL_SKILLS).forEach((list) => list.forEach((sk) => (sk.icon = toLocalIcon(sk.icon))));
+  }
+  CLASSES.forEach((cls) => {
+    (cls.techniques || []).forEach((t) => (t.icon = toLocalIcon(t.icon)));
+    if (cls.masterTech) cls.masterTech.icon = toLocalIcon(cls.masterTech.icon);
+  });
+}
+
+window.addEventListener(
+  "error",
+  (e) => {
+    const img = e.target;
+    if (!(img instanceof HTMLImageElement)) return;
+    const local = img.getAttribute("src");
+    const remote = ICON_FALLBACKS[local];
+    if (remote && !img.dataset.fallbackTried) {
+      img.dataset.fallbackTried = "1";
+      img.src = remote;
+    } else if (img.dataset.fallbackTried) {
+      img.style.visibility = "hidden";
+    }
+  },
+  true
+);
+
+// ==========================================
+// ONGLET CLASSES + « QUI POUR CETTE CLASSE ? »
+// ==========================================
+let classesTierFilter = "";
+let selectedClassId = null;
+let classRankingShowAll = false;
+
+const NEUTRAL_PRIORITIES = Object.fromEntries(Object.keys(STAT_LABELS).map((k) => [k, "neutre"]));
+
+function initClassesTab() {
+  const grid = document.getElementById("classes-grid");
+  if (!grid) return;
+
+  const skillSelect = document.getElementById("classes-skill-filter");
+  SKILLS_LIST.forEach((sk) => {
+    const opt = document.createElement("option");
+    opt.value = sk.id;
+    opt.textContent = sk.name;
+    skillSelect.appendChild(opt);
+  });
+
+  document.querySelectorAll(".tier-filter-btn").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      classesTierFilter = btn.dataset.tier;
+      document.querySelectorAll(".tier-filter-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      renderClassesGrid();
+    })
+  );
+  skillSelect.addEventListener("change", renderClassesGrid);
+  document.getElementById("classes-search").addEventListener("input", renderClassesGrid);
+
+  renderClassesGrid();
+}
+
+function renderClassesGrid() {
+  const grid = document.getElementById("classes-grid");
+  const skill = document.getElementById("classes-skill-filter").value;
+  const q = normalizeSearchText(document.getElementById("classes-search").value.trim());
+
+  const list = CLASSES.filter(
+    (c) =>
+      (!classesTierFilter || c.tier === classesTierFilter) &&
+      (!skill || (c.allowed || []).includes(skill)) &&
+      (!q || normalizeSearchText(c.name).includes(q))
+  );
+
+  grid.innerHTML = list.length ? "" : `<p class="empty-note">Aucune classe ne correspond à ces filtres.</p>`;
+  list.forEach((cls) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = `class-card tier-${tierSlug(cls.tier)} ${cls.id === selectedClassId ? "active" : ""}`;
+    card.innerHTML = `
+      <span class="class-card-tier">${cls.tier}</span>
+      <span class="class-card-name">${cls.name}</span>
+      <span class="class-card-icons">${(cls.allowed || [])
+        .map((id) => {
+          const sk = getSkillObj(id);
+          return sk.icon ? `<img src="${sk.icon}" alt="${sk.name}" title="${sk.name}" class="skill-icon">` : "";
+        })
+        .join("")}</span>`;
+    card.addEventListener("click", () => {
+      selectedClassId = cls.id;
+      classRankingShowAll = false;
+      renderClassesGrid();
+      renderClassDetail(true);
+    });
+    grid.appendChild(card);
+  });
+}
+
+function tierSlug(tier) {
+  return tier === "Novice" ? "novice" : tier === "Avancée" ? "avancee" : "elite";
+}
+
+function growthChipsHtml(growths) {
+  return Object.entries(STAT_LABELS)
+    .map(([k, label]) => {
+      const v = (growths && growths[k]) || 0;
+      const cls = v > 0 ? "pos" : v < 0 ? "neg" : "neu";
+      return `<div class="class-growth ${cls}"><span>${label}</span><strong>${v > 0 ? "+" : ""}${v}%</strong></div>`;
+    })
+    .join("");
+}
+
+function techniqueListHtml(cls) {
+  const techs = (cls.techniques || [])
+    .map((t) => `<div class="class-tech"><img src="${t.icon}" alt="" class="class-tech-icon"><div><strong>${t.name}</strong><span>${t.desc}</span></div></div>`)
+    .join("");
+  const master = cls.masterTech
+    ? `<div class="class-tech master"><img src="${cls.masterTech.icon}" alt="" class="class-tech-icon"><div><strong>${cls.masterTech.name}</strong><span>${cls.masterTech.desc}</span></div></div>`
+    : `<p class="empty-note">Aucune magistrale connue.</p>`;
+  return { techs: techs || `<p class="empty-note">Aucune technique de base.</p>`, master };
+}
+
+function rankCharactersForClass(cls) {
+  return CHARACTERS.map((c) => {
+    const ev = evaluateSynergy(c, cls, [...(c.proficiencies || [])], NEUTRAL_PRIORITIES, {
+      unfavored: [...(c.weaknesses || [])],
+      currentGrowths: c.growths
+    });
+    return { c, ev };
+  }).sort((a, b) => b.ev.score - a.ev.score || a.c.name.localeCompare(b.c.name, "fr"));
+}
+
+function renderClassDetail(scroll) {
+  const detail = document.getElementById("class-detail");
+  const cls = CLASSES.find((c) => c.id === selectedClassId);
+  if (!cls) {
+    detail.hidden = true;
+    return;
+  }
+  detail.hidden = false;
+
+  const { techs, master } = techniqueListHtml(cls);
+  const ranking = rankCharactersForClass(cls);
+  const shown = classRankingShowAll ? ranking : ranking.slice(0, 10);
+
+  detail.innerHTML = `
+    <div class="class-detail-header">
+      <div>
+        <span class="badge-tier">${cls.tier}</span>
+        <h3>${cls.name}</h3>
+        <div class="class-card-icons big">${(cls.allowed || [])
+          .map((id) => {
+            const sk = getSkillObj(id);
+            return `<span class="sheet-prof">${sk.icon ? `<img src="${sk.icon}" alt="" class="skill-icon">` : ""}${sk.name}</span>`;
+          })
+          .join("")}</div>
+      </div>
+    </div>
+
+    <div class="class-detail-columns">
+      <div class="sheet-block">
+        <h4>Croissances de la classe</h4>
+        <div class="class-growths">${growthChipsHtml(cls.growths)}</div>
+      </div>
+      <div class="sheet-block">
+        <h4>Techniques</h4>
+        ${techs}
+        <h4 style="margin-top: 12px;">Magistrale</h4>
+        ${master}
+      </div>
+    </div>
+
+    <div class="sheet-block">
+      <h4>🎯 Qui pour cette classe ? <span class="sheet-total">${ranking.length} personnages classés</span></h4>
+      <p class="ranking-note">Calcul avec le moteur du calculateur : maîtrises du personnage (points forts et peu adapté) et toutes les stats en Neutre.</p>
+      <div class="class-ranking">
+        ${shown
+          .map(({ c, ev }, i) => {
+            const fits = ev.matchingSkills.map((id) => getSkillObj(id).name);
+            const bad = (c.weaknesses || []).filter((id) => (cls.allowed || []).includes(id)).map((id) => getSkillObj(id).name);
+            return `
+              <button type="button" class="ranking-row" data-char="${c.id}" title="Voir la fiche de ${c.name}">
+                <span class="ranking-pos">${i + 1}</span>
+                <img src="${c.portrait || "images/default.png"}" alt="" class="ranking-portrait" loading="lazy">
+                <span class="ranking-name">${c.name}</span>
+                <span class="ranking-fits">${fits.length ? `✓ ${fits.join(", ")}` : `<span class="neu">Aucune maîtrise en commun</span>`}${bad.length ? `<span class="ranking-bad"> · ✕ ${bad.join(", ")}</span>` : ""}</span>
+                <span class="rank-badge ${getRankCssClass(ev.rank)}">${ev.rank}</span>
+                <span class="ranking-score">${fmtPts(ev.score)}</span>
+              </button>`;
+          })
+          .join("")}
+      </div>
+      ${ranking.length > 10 ? `<button type="button" class="char-edit-btn secondary ranking-more" id="ranking-more-btn">${classRankingShowAll ? "Afficher seulement le top 10" : `Afficher les ${ranking.length} personnages`}</button>` : ""}
+    </div>
+  `;
+
+  detail.querySelectorAll(".ranking-row").forEach((row) => row.addEventListener("click", () => openCharacterSheet(row.dataset.char)));
+  const more = document.getElementById("ranking-more-btn");
+  if (more)
+    more.addEventListener("click", () => {
+      classRankingShowAll = !classRankingShowAll;
+      renderClassDetail(false);
+    });
+
+  if (scroll) detail.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// ==========================================
+// COMPARER DEUX CLASSES (calculateur)
+// ==========================================
+const classCompareChoice = {};
+
+function renderClassCompare(cls, tier) {
+  const select = document.getElementById("class-compare-select");
+  const out = document.getElementById("class-compare-result");
+  if (!select || !out || !currentChar) return;
+
+  const others = CLASSES.filter((c) => c.tier === tier && c.id !== cls.id);
+  if (classCompareChoice[tier] === cls.id) classCompareChoice[tier] = "";
+  select.innerHTML =
+    `<option value="">-- Choisir une classe ${tier} --</option>` +
+    others.map((c) => `<option value="${c.id}" ${classCompareChoice[tier] === c.id ? "selected" : ""}>${c.name}</option>`).join("");
+  select.onchange = () => {
+    classCompareChoice[tier] = select.value;
+    renderClassCompare(cls, tier);
+  };
+
+  const other = CLASSES.find((c) => c.id === classCompareChoice[tier]);
+  if (!other) {
+    out.innerHTML = `<p class="empty-note">Choisissez une classe pour la comparer à ${cls.name}.</p>`;
+    return;
+  }
+
+  const evA = evaluateSynergy(currentChar, cls);
+  const evB = evaluateSynergy(currentChar, other);
+  const baseline = getCurrentGrowths();
+
+  const statRows = Object.entries(STAT_LABELS)
+    .map(([k, label]) => {
+      const a = (currentChar.growths[k] || 0) + ((cls.growths && cls.growths[k]) || 0);
+      const b = (currentChar.growths[k] || 0) + ((other.growths && other.growths[k]) || 0);
+      const cur = baseline[k] ?? currentChar.growths[k];
+      const fmt = (v) => `${v}% <small class="${v - cur > 0 ? "pos" : v - cur < 0 ? "neg" : "neu"}">(${v - cur > 0 ? "+" : ""}${v - cur})</small>`;
+      return `<tr><td class="${a > b ? "win-a" : ""}">${fmt(a)}</td><th>${label}</th><td class="${b > a ? "win-b" : ""}">${fmt(b)}</td></tr>`;
+    })
+    .join("");
+
+  const names = (ids) => (ids.length ? ids.map((id) => getSkillObj(id).name).join(", ") : "—");
+  const unfavUsed = (c) => unfavoredSkills.filter((id) => (c.allowed || []).includes(id));
+  const techNames = (c) => [...(c.techniques || []).map((t) => t.name), c.masterTech ? `★ ${c.masterTech.name}` : null].filter(Boolean).join(", ") || "—";
+
+  out.innerHTML = `
+    <table class="compare-table class-compare-table">
+      <thead>
+        <tr><th class="head-a">${cls.name}</th><th></th><th class="head-b">${other.name}</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="rank-badge ${getRankCssClass(evA.rank)}">${evA.rank}</span> ${fmtPts(evA.score)} pts</td>
+          <th>Rang</th>
+          <td><span class="rank-badge ${getRankCssClass(evB.rank)}">${evB.rank}</span> ${fmtPts(evB.score)} pts</td>
+        </tr>
+        <tr><td>${names(evA.matchingSkills)}</td><th>Maîtrises en commun</th><td>${names(evB.matchingSkills)}</td></tr>
+        <tr><td class="neg-text">${names(unfavUsed(cls))}</td><th>Peu adapté</th><td class="neg-text">${names(unfavUsed(other))}</td></tr>
+        <tr><td>${techNames(cls)}</td><th>Techniques</th><td>${techNames(other)}</td></tr>
+        ${statRows}
+      </tbody>
+    </table>
+    <button type="button" class="char-edit-btn secondary" id="class-compare-pick" style="margin-top: 10px;">Choisir ${other.name} à la place</button>
+  `;
+
+  document.getElementById("class-compare-pick").addEventListener("click", () => {
+    classCompareChoice[tier] = cls.id;
+    selectedClasses[tier] = other;
+    previewClass = other;
+    renderTierList(tier);
+    renderAnalysis(other, evaluateSynergy(currentChar, other), tier);
+    renderCharacterInfo();
+  });
+}
+
+// ==========================================
+// RECHERCHE DE COMPÉTENCES PERSONNELLES PAR EFFET
+// ==========================================
+function initEffectSearch() {
+  const input = document.getElementById("effect-search");
+  if (!input) return;
+  input.addEventListener("input", renderEffectSearch);
+}
+
+function renderEffectSearch() {
+  const input = document.getElementById("effect-search");
+  const box = document.getElementById("effect-search-results");
+  const raw = input.value.trim();
+  const q = normalizeSearchText(raw);
+  if (q.length < 2 || typeof PERSONAL_SKILLS === "undefined") {
+    box.hidden = true;
+    box.innerHTML = "";
+    return;
+  }
+
+  const results = [];
+  CHARACTERS.forEach((c) => {
+    (PERSONAL_SKILLS[c.id] || []).forEach((sk) => {
+      if (normalizeSearchText(`${sk.name} ${sk.desc}`).includes(q)) results.push({ c, sk });
+    });
+  });
+
+  box.hidden = false;
+  if (!results.length) {
+    box.innerHTML = `<p class="empty-note">Aucune compétence ne contient « ${raw} ».</p>`;
+    return;
+  }
+
+  const count = new Set(results.map((r) => r.c.id)).size;
+  box.innerHTML =
+    `<p class="effect-count">${results.length} compétence${results.length > 1 ? "s" : ""} · ${count} personnage${count > 1 ? "s" : ""}</p>` +
+    results
+      .map(
+        ({ c, sk }) => `
+      <button type="button" class="effect-row" data-char="${c.id}" title="Voir la fiche de ${c.name}">
+        <img src="${c.portrait || "images/default.png"}" alt="" class="ranking-portrait" loading="lazy">
+        <span class="effect-char">${c.name}</span>
+        <img src="${sk.icon}" alt="" class="personal-skill-icon small">
+        <span class="personal-skill-when ${getWhenCss(sk.when)}">${sk.when}</span>
+        <span class="effect-text"><strong>${sk.name}</strong> — ${highlightMatch(sk.desc, raw)}</span>
+      </button>`
+      )
+      .join("");
+
+  box.querySelectorAll(".effect-row").forEach((row) => row.addEventListener("click", () => openCharacterSheet(row.dataset.char)));
+}
+
+function highlightMatch(text, query) {
+  const nText = normalizeSearchText(text);
+  const nQuery = normalizeSearchText(query);
+  const i = nText.indexOf(nQuery);
+  if (i < 0 || !nQuery) return text;
+  return `${text.slice(0, i)}<mark>${text.slice(i, i + nQuery.length)}</mark>${text.slice(i + nQuery.length)}`;
+}
+
+// ==========================================
+// BUILDS ENREGISTRÉS
+// ==========================================
+const BUILDS_KEY = "fefw_builds";
+
+function loadBuilds() {
+  try {
+    const list = JSON.parse(localStorage.getItem(BUILDS_KEY) || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveBuilds(list) {
+  try {
+    localStorage.setItem(BUILDS_KEY, JSON.stringify(list));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function initBuilds() {
+  const btn = document.getElementById("save-build-btn");
+  if (btn) btn.addEventListener("click", saveCurrentBuild);
+  renderMyBuilds();
+}
+
+function saveCurrentBuild() {
+  const status = document.getElementById("save-build-status");
+  if (!currentChar || !validatedClasses.Élite) return;
+  const tiers = ["Novice", "Avancée", "Élite"];
+  const build = {
+    id: `b${Date.now()}`,
+    charId: currentChar.id,
+    date: new Date().toISOString(),
+    classes: Object.fromEntries(tiers.map((t) => [t, validatedClasses[t] ? validatedClasses[t].id : null])),
+    ranks: Object.fromEntries(tiers.map((t) => [t, validatedEvals[t] ? validatedEvals[t].rank : null])),
+    scores: Object.fromEntries(tiers.map((t) => [t, validatedEvals[t] ? validatedEvals[t].score : null])),
+    growths: getCurrentGrowths()
+  };
+  const list = loadBuilds();
+  list.unshift(build);
+  if (saveBuilds(list)) {
+    status.textContent = "✓ Build enregistré";
+    status.className = "save-team-status status-saved";
+  } else {
+    status.textContent = "⚠️ Impossible d'enregistrer dans ce navigateur";
+    status.className = "save-team-status status-error";
+  }
+  renderMyBuilds();
+}
+
+function deleteBuild(buildId) {
+  saveBuilds(loadBuilds().filter((b) => b.id !== buildId));
+  renderMyBuilds();
+}
+
+function buildRowHtml(b, withName) {
+  const c = CHARACTERS.find((x) => x.id === b.charId);
+  const date = new Date(b.date);
+  const dateTxt = isNaN(date) ? "" : date.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+  const steps = ["Novice", "Avancée", "Élite"]
+    .map((t) => {
+      const cls = CLASSES.find((x) => x.id === b.classes[t]);
+      const rank = b.ranks && b.ranks[t];
+      return `<span class="build-step">${cls ? cls.name : "—"}${rank ? ` <span class="rank-badge ${getRankCssClass(rank)}">${rank}</span>` : ""}</span>`;
+    })
+    .join(`<span class="build-arrow">➔</span>`);
+  return `
+    <div class="build-row">
+      ${withName && c ? `<img src="${c.portrait}" alt="" class="ranking-portrait"><button type="button" class="build-char" data-char="${c.id}">${c.name}</button>` : ""}
+      <div class="build-steps">${steps}</div>
+      <span class="build-date">${dateTxt}</span>
+      <button type="button" class="build-delete-btn" data-build-id="${b.id}" title="Supprimer ce build">🗑️</button>
+    </div>`;
+}
+
+function renderMyBuilds() {
+  const panel = document.getElementById("my-builds-panel");
+  const box = document.getElementById("my-builds-list");
+  if (!panel || !box) return;
+  const list = loadBuilds();
+  panel.hidden = list.length === 0;
+  box.innerHTML = list.map((b) => buildRowHtml(b, true)).join("");
+  box.querySelectorAll(".build-delete-btn").forEach((btn) => btn.addEventListener("click", () => deleteBuild(btn.dataset.buildId)));
+  box.querySelectorAll(".build-char").forEach((btn) => btn.addEventListener("click", () => openCharacterSheet(btn.dataset.char)));
+}
+
+function renderCharacterBuilds(charId) {
+  const list = loadBuilds().filter((b) => b.charId === charId);
+  if (!list.length) return "";
+  return `
+    <div class="sheet-block">
+      <h4>Builds enregistrés <span class="sheet-total">${list.length}</span></h4>
+      <div class="builds-list">${list.map((b) => buildRowHtml(b, false)).join("")}</div>
+    </div>`;
 }

@@ -22,6 +22,7 @@
       <button id="tab-recruitment-btn" class="btn-secondary" style="width: auto; padding: 10px 20px; margin-top: 0; background: #222; color: #d4af37; border: 1px solid #d4af37;">Recrutement</button>
       <button id="tab-compare-btn" class="btn-secondary" style="width: auto; padding: 10px 20px; margin-top: 0; background: #222; color: #d4af37; border: 1px solid #d4af37;">Comparateur</button>
       <button id="tab-factions-btn" class="btn-secondary" style="width: auto; padding: 10px 20px; margin-top: 0; background: #222; color: #d4af37; border: 1px solid #d4af37;">Factions</button>
+      <button id="tab-classes-btn" class="btn-secondary" style="width: auto; padding: 10px 20px; margin-top: 0; background: #222; color: #d4af37; border: 1px solid #d4af37;">Classes</button>
     </div>
 
     <!-- ONGLET SYSTÈMES ET BARÈME -->
@@ -32,11 +33,13 @@
       <div class="sub-box" style="margin-top: 20px;">
         <h4>1. Maîtrises & Compétences (Priorité Majeure)</h4>
         <p style="color: #ccc; font-size: 0.95rem; line-height: 1.5;">
-          Les compétences et armes du personnage pèsent lourdement dans la balance de la synergie :
+          Quand vous choisissez un personnage, ses points forts sont cochés comme <strong>prioritaires</strong> et ses compétences peu adaptées sont marquées <strong>peu adapté</strong>. Vous pouvez changer chaque état d'un clic.
         </p>
         <ul style="color: #ddd; font-size: 0.95rem; line-height: 1.6; margin-top: 8px;">
-          <li><strong style="color: #2ecc71;">+10 points</strong> par maîtrise compatible entre la classe et le personnage.</li>
-          <li><strong style="color: #e74c3c;">-5 points</strong> de pénalité si une compétence prioritaire/de base du personnage n'est pas supportée par la classe.</li>
+          <li><strong style="color: #2ecc71;">+10 points</strong> par maîtrise prioritaire présente dans la classe.</li>
+          <li><strong style="color: #e74c3c;">-5 points</strong> par maîtrise prioritaire absente de la classe.</li>
+          <li><strong style="color: #aaa;">Déplacements (Infanterie, Cavalerie, Aérien) :</strong> une classe n'en a qu'un. Si elle correspond à l'un des déplacements prioritaires, les autres ne donnent pas de malus.</li>
+          <li><strong style="color: #e74c3c;">-5 points</strong> par maîtrise <em>peu adaptée</em> que la classe utilise.</li>
         </ul>
       </div>
 
@@ -49,7 +52,7 @@
           <li><strong style="color: #00e5ff; text-shadow: 0 0 8px rgba(0,229,255,0.6);">★★★ Divine :</strong> Multiplie la croissance (ou l'évolution) par <code style="color: #00e5ff;">1.5</code> en cas de hausse ou de baisse.</li>
           <li><strong class="stat-majeure-text">★★ Majeure :</strong> Multiplie la croissance (ou l'évolution) par <code style="color: #2ecc71;">1</code> en cas de hausse ou de baisse.</li>
           <li><strong style="color: #d4af37;">★ Prioritaire :</strong> Multiplie la croissance (ou l'évolution) par <code style="color: #ffd700;">0.5</code> en cas de hausse ou de baisse.</li>
-          <li><strong style="color: #aaaaaa;">• Neutre (Par défaut) :</strong> Apporte un petit bonus de <code style="color: #aaa;">évolution × 0.25</code> points par % de croissance positive (aucun malus si négatif).</li>
+          <li><strong style="color: #aaaaaa;">• Neutre (Par défaut) :</strong> Compte pour <code style="color: #aaa;">évolution × 0.25</code>, en hausse comme en baisse.</li>
           <li><strong style="color: #e74c3c;">🔻 Moins prioritaire :</strong> Donne <code style="color: #aaaaaa;">0 point</code> si la stat indésirable baisse, mais multiplie l'évolution par <code style="color: #e74c3c;">1.5</code> et retire cette somme (<code style="color: #e74c3c;">-(évolution × 1.5)</code>) si elle augmente.</li>
         </ul>
       </div>
@@ -211,8 +214,34 @@
     <section id="factions-panel" class="card" hidden>
       <h2 style="text-align: center; color: #f7e7ce; margin-bottom: 4px;">🏰 Factions</h2>
       <p class="subtitle" style="text-align: center; margin-bottom: 20px;">Choisissez une faction pour voir ses membres — cliquez sur un membre pour ouvrir sa fiche</p>
+      <div class="effect-search-box">
+        <input type="search" id="effect-search" class="classes-search" placeholder="🔎 Rechercher une compétence personnelle par effet (ex. soin, Esq, attaque double)…">
+        <div id="effect-search-results" class="effect-search-results" hidden></div>
+      </div>
       <div id="factions-grid" class="factions-grid"></div>
       <div id="faction-detail" class="faction-detail"></div>
+    </section>
+
+    <!-- ONGLET CLASSES -->
+    <section id="classes-panel" class="card" hidden>
+      <h2 style="text-align: center; color: #f7e7ce; margin-bottom: 4px;">🛡️ Classes</h2>
+      <p class="subtitle" style="text-align: center; margin-bottom: 18px;">Toutes les classes du jeu — choisissez-en une pour voir ses détails et les personnages qui lui conviennent le mieux</p>
+
+      <div class="classes-filters">
+        <div class="classes-tier-filter" id="classes-tier-filter">
+          <button type="button" class="tier-filter-btn active" data-tier="">Toutes</button>
+          <button type="button" class="tier-filter-btn" data-tier="Novice">Novice</button>
+          <button type="button" class="tier-filter-btn" data-tier="Avancée">Avancée</button>
+          <button type="button" class="tier-filter-btn" data-tier="Élite">Élite</button>
+        </div>
+        <select id="classes-skill-filter" class="styled-select classes-skill-select">
+          <option value="">Toutes les maîtrises</option>
+        </select>
+        <input type="search" id="classes-search" class="classes-search" placeholder="🔍 Rechercher une classe…">
+      </div>
+
+      <div id="classes-grid" class="classes-grid"></div>
+      <div id="class-detail" class="class-detail" hidden></div>
     </section>
 
     <!-- ONGLET CALCULATEUR DE BUILD -->
@@ -227,7 +256,7 @@
 
         <div id="skills-selection-section" hidden class="skills-config-box">
           <h3 style="color: #d4af37; margin-bottom: 4px; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.5px;">Maîtrises & Compétences prioritaires</h3>
-          <p class="helper-text" style="margin-bottom: 15px; color: #aaa; font-size: 0.9rem;">Cochez ou décochez les compétences pour orienter les calculs de synergie :</p>
+          <p class="helper-text" style="margin-bottom: 15px; color: #aaa; font-size: 0.9rem;">Les points forts du personnage sont cochés automatiquement, et ce qui lui est peu adapté est marqué en rouge. Cliquez sur une compétence pour changer son état : <span class="prio-text-neutre">neutre</span> ➔ <span class="prio-text-prioritaire">✓ prioritaire</span> ➔ <span class="prio-text-moins">✕ peu adapté</span> ➔ <span class="prio-text-neutre">neutre</span>.</p>
           
           <div style="margin-bottom: 12px;">
             <h5 style="color: #888; font-size: 0.85rem; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">Armes</h5>
@@ -247,7 +276,7 @@
 
         <div id="stats-priority-section" hidden class="skills-config-box" style="margin-top: 15px; border-top: 1px solid #444; padding-top: 15px;">
           <h3 style="color: #d4af37; margin-bottom: 4px; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.5px;">⚙️ Gestion des Statistiques</h3>
-          <p class="helper-text" style="margin-bottom: 15px; color: #aaa; font-size: 0.9rem;">Cliquez sur un carré de stat pour alterner les priorités : Divine (★★★) ➔ Majeure (★★) ➔ Prioritaire (★) ➔  Neutre ➔ Moins prioritaire (🔻)</p>
+          <p class="helper-text" style="margin-bottom: 15px; color: #aaa; font-size: 0.9rem;">Cliquez sur un carré de stat pour alterner les priorités : <span class="prio-text-divine">Divine (★★★)</span> ➔ <span class="prio-text-majeure">Majeure (★★)</span> ➔ <span class="prio-text-prioritaire">Prioritaire (★)</span> ➔ <span class="prio-text-neutre">Neutre</span> ➔ <span class="prio-text-moins">Moins prioritaire (🔻)</span></p>
           <div id="stats-priority-grid" class="growths-grid"></div>
         </div>
       </section>
@@ -320,6 +349,12 @@
             </div>
 
             <div class="sub-box">
+              <h4>⚖️ Comparer avec une autre classe</h4>
+              <select id="class-compare-select" class="styled-select" style="margin-bottom: 10px;"></select>
+              <div id="class-compare-result"></div>
+            </div>
+
+            <div class="sub-box">
               <h4>Progression des Growth Rates</h4>
               <table class="growth-table">
                 <thead>
@@ -378,17 +413,55 @@
           <div id="final-growths-grid" class="growths-grid"></div>
         </div>
 
+        <div class="final-actions">
+          <button id="save-build-btn" type="button" class="btn-save-team">💾 Enregistrer ce build</button>
+          <span id="save-build-status" class="save-team-status"></span>
+        </div>
+
         <button id="restart-calculator-btn" class="btn-secondary" style="margin-top: 20px;">Recommencer un nouveau build</button>
       </section>
 
       <div class="actions-footer">
         <button id="reset-btn" class="btn-danger" hidden>Réinitialiser la progression</button>
       </div>
+
+      <!-- Builds enregistrés -->
+      <section id="my-builds-panel" class="card" hidden>
+        <h2>📚 Mes builds</h2>
+        <p class="subtitle">Les builds enregistrés dans ce navigateur</p>
+        <div id="my-builds-list" class="builds-list"></div>
+      </section>
     </div>
   </div>
 
   <script src="data.js"></script>
+  <script src="i18n.js"></script>
   <script src="script.js"></script>
+  <!-- ÉDITION DES MAÎTRISES D'UN PERSONNAGE (fenêtre) -->
+  <div id="char-edit-modal" class="char-sheet-overlay" hidden>
+    <div class="char-sheet char-edit" role="dialog" aria-modal="true" aria-labelledby="char-edit-name">
+      <button type="button" class="char-sheet-close" id="char-edit-close" title="Fermer">✕</button>
+      <div class="char-edit-header">
+        <img id="char-edit-portrait" src="" alt="" class="char-edit-portrait">
+        <div>
+          <p class="char-edit-kicker">Modifier les Maîtrises &amp; Compétences</p>
+          <h2 id="char-edit-name"></h2>
+          <p class="char-edit-help">Clic sur une compétence : <span class="prio-text-neutre">neutre</span> ➔ <span class="prio-text-prioritaire">✓ point fort</span> ➔ <span class="prio-text-moins">✕ peu adapté</span> ➔ <span class="prio-text-neutre">neutre</span>. Les changements sont enregistrés dans ce navigateur et utilisés partout sur le site.</p>
+        </div>
+      </div>
+      <div id="char-edit-skills"></div>
+      <p id="char-edit-message" class="char-edit-message"></p>
+      <textarea id="char-edit-code" class="char-edit-code" rows="2" readonly hidden></textarea>
+      <div class="char-edit-actions">
+        <button type="button" id="char-edit-reset" class="char-edit-btn secondary">↺ Valeurs d'origine</button>
+        <button type="button" id="char-edit-copy" class="char-edit-btn secondary">📋 Copier pour data.js</button>
+        <span class="char-edit-spacer"></span>
+        <button type="button" id="char-edit-cancel" class="char-edit-btn secondary">Annuler</button>
+        <button type="button" id="char-edit-save" class="char-edit-btn primary">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- FICHE PERSONNAGE (fenêtre) -->
   <div id="char-sheet-modal" class="char-sheet-overlay" hidden>
     <div class="char-sheet" role="dialog" aria-modal="true" aria-labelledby="char-sheet-name">

@@ -1622,6 +1622,8 @@ body.sheet-open {
 .sheet-actions {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .sheet-compare-btn {
@@ -2265,5 +2267,788 @@ body.sheet-open {
 
   .faction-detail-title {
     font-size: 1.3rem;
+  }
+}
+
+/* ==========================================
+   COMPÉTENCES PERSONNELLES (fiche personnage)
+   ========================================== */
+.personal-skills-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.personal-skill {
+  display: grid;
+  grid-template-columns: 40px 86px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid #262626;
+}
+
+.personal-skill:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.personal-skill-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.personal-skill-when {
+  font-size: 0.72rem;
+  font-weight: bold;
+  padding: 3px 6px;
+  border-radius: 4px;
+  text-align: center;
+  border: 1px solid;
+}
+
+.personal-skill-when.when-base { color: #f4d03f; border-color: #8a6d1a; background: #2a2310; }
+.personal-skill-when.when-niv { color: #7ed957; border-color: #2e6b3e; background: #142417; }
+.personal-skill-when.when-over { color: #ec7063; border-color: #8b2e2e; background: #2a1414; }
+.personal-skill-when.when-unk { color: #e6a23c; border-color: #8a5a1a; background: #2a1d0e; }
+
+.personal-skill-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.personal-skill-name {
+  color: #ffd700;
+  font-weight: bold;
+  font-size: 0.92rem;
+}
+
+.personal-skill-desc {
+  color: #ddd;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+/* Icônes des techniques de classe venant du wiki : même taille que les icônes locales */
+.tooltip-badge .skill-icon {
+  object-fit: contain;
+}
+
+@media (max-width: 760px) {
+  .personal-skill {
+    grid-template-columns: 36px 1fr;
+  }
+
+  .personal-skill-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .personal-skill-when {
+    justify-self: start;
+  }
+
+  .personal-skill-text {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Compétences peu adaptées (fiche personnage) */
+.sheet-weak {
+  align-items: center;
+}
+
+.sheet-weak-label {
+  color: #e07a6f;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.sheet-prof.weak {
+  border-color: #8b2e2e;
+  color: #f0a59c;
+  background: #241414;
+}
+
+/* ==========================================
+   CALCULATEUR : maîtrises à 3 états
+   ========================================== */
+button.skill-checkbox-label {
+  font-family: inherit;
+}
+
+.skill-state-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid #666;
+  font-size: 0.75rem;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.skill-checkbox-label.skill-state-prio {
+  background: linear-gradient(145deg, rgba(212, 175, 55, 0.3), rgba(40, 30, 10, 0.7));
+  border-color: #ffcc00;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(255, 204, 0, 0.4);
+}
+
+.skill-checkbox-label.skill-state-prio .skill-state-mark {
+  background: #d4af37;
+  border-color: #ffcc00;
+  color: #121212;
+}
+
+.skill-checkbox-label.skill-state-unfav {
+  background: linear-gradient(145deg, rgba(139, 46, 46, 0.35), rgba(30, 12, 12, 0.8));
+  border-color: #c0392b;
+  color: #f0a59c;
+}
+
+.skill-checkbox-label.skill-state-unfav .skill-state-mark {
+  background: #c0392b;
+  border-color: #e74c3c;
+  color: #ffffff;
+}
+
+.skill-checkbox-label.skill-state-unfav:hover {
+  border-color: #e74c3c;
+}
+
+/* Maîtrise de la classe peu adaptée au personnage (analyse) */
+.skill-chip.unfav {
+  border-color: #c0392b !important;
+  color: #f0a59c !important;
+  background: #241414 !important;
+}
+
+.row-unfav td:first-child {
+  color: #f0a59c;
+}
+
+/* Texte d'aide coloré comme les priorités */
+.prio-text-divine { color: #00e5ff; font-weight: bold; text-shadow: 0 0 5px rgba(0, 229, 255, 0.5); }
+.prio-text-majeure { color: #2ecc71; font-weight: bold; }
+.prio-text-prioritaire { color: #d4af37; font-weight: bold; }
+.prio-text-neutre { color: #bbbbbb; font-weight: bold; }
+.prio-text-moins { color: #e74c3c; font-weight: bold; }
+
+/* Message quand on valide sans avoir choisi de classe */
+.confirm-warning {
+  color: #e6a23c;
+  font-size: 0.85rem;
+  margin: 8px 0 0;
+}
+
+/* ==========================================
+   ÉDITION DES MAÎTRISES (page Factions)
+   ========================================== */
+.faction-member-wrap {
+  position: relative;
+  display: flex;
+}
+
+.faction-member-wrap .faction-member-card {
+  width: 100%;
+}
+
+.member-edit-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid #d4af37;
+  background: rgba(18, 18, 18, 0.85);
+  cursor: pointer;
+  font-size: 0.85rem;
+  opacity: 0.8;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.member-edit-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.member-edited-tag {
+  position: absolute;
+  bottom: 46px;
+  right: 12px;
+  background: #2a2211;
+  color: #ffd700;
+  border: 1px solid #d4af37;
+  font-size: 0.68rem;
+  font-weight: bold;
+  padding: 1px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.char-edit {
+  max-width: 720px;
+}
+
+.char-edit-header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.char-edit-portrait {
+  width: 72px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 2px solid #d4af37;
+  flex-shrink: 0;
+}
+
+.char-edit-kicker {
+  margin: 0;
+  color: #d4af37;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.char-edit-header h2 {
+  margin: 2px 0 6px;
+  color: #f7e7ce;
+}
+
+.char-edit-help {
+  margin: 0;
+  color: #aaa;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.char-edit-group {
+  margin-bottom: 14px;
+}
+
+.char-edit-group h5 {
+  color: #888;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  margin: 0 0 6px;
+  letter-spacing: 0.5px;
+}
+
+.char-edit-group .skills-grid {
+  gap: 8px;
+}
+
+.char-edit-message {
+  min-height: 1.2em;
+  color: #7ed957;
+  font-size: 0.85rem;
+  margin: 4px 0 8px;
+}
+
+.char-edit-code {
+  width: 100%;
+  background: #121212;
+  color: #f7e7ce;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 8px;
+  font-family: Consolas, monospace;
+  font-size: 0.8rem;
+  margin-bottom: 10px;
+  resize: vertical;
+}
+
+.char-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.char-edit-spacer {
+  flex: 1;
+}
+
+.char-edit-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-family: inherit;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.char-edit-btn.secondary {
+  background: #1a1a1a;
+  color: #d4af37;
+  border: 1px solid #555;
+}
+
+.char-edit-btn.secondary:hover:not(:disabled) {
+  border-color: #d4af37;
+}
+
+.char-edit-btn.secondary:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.char-edit-btn.primary {
+  background: linear-gradient(145deg, #d4af37, #b89728);
+  color: #121212;
+  border: 1px solid #f7e7ce;
+}
+
+.char-edit-btn.primary:hover {
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.45);
+}
+
+@media (max-width: 760px) {
+  .char-edit-spacer {
+    display: none;
+  }
+
+  .char-edit-btn {
+    flex: 1 1 45%;
+  }
+}
+
+/* ==========================================
+   ONGLET CLASSES
+   ========================================== */
+.classes-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.classes-tier-filter {
+  display: flex;
+}
+
+.tier-filter-btn {
+  background: #1a1a1a;
+  color: #d4af37;
+  border: 1px solid #d4af37;
+  padding: 8px 14px;
+  font-weight: bold;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.tier-filter-btn + .tier-filter-btn { border-left: none; }
+.tier-filter-btn:first-child { border-radius: 6px 0 0 6px; }
+.tier-filter-btn:last-child { border-radius: 0 6px 6px 0; }
+
+.tier-filter-btn.active {
+  background: linear-gradient(145deg, #d4af37, #b89728);
+  color: #121212;
+}
+
+.classes-skill-select {
+  width: auto;
+  min-width: 190px;
+  margin: 0;
+}
+
+.classes-search {
+  flex: 1 1 220px;
+  background: #1a1a1a;
+  border: 1px solid #555;
+  color: #f7e7ce;
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+
+.classes-search:focus {
+  outline: none;
+  border-color: #d4af37;
+}
+
+.classes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.class-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 10px 12px;
+  background: linear-gradient(145deg, #222, #171717);
+  border: 1px solid #3a3a3a;
+  border-left: 4px solid #777;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.class-card:hover { transform: translateY(-2px); border-color: #b89728; }
+.class-card.tier-novice { border-left-color: #8fbf6a; }
+.class-card.tier-avancee { border-left-color: #5dade2; }
+.class-card.tier-elite { border-left-color: #d4af37; }
+
+.class-card.active {
+  border-color: #ffd700;
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.3);
+}
+
+.class-card-tier {
+  font-size: 0.7rem;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.class-card-name {
+  color: #f7e7ce;
+  font-weight: bold;
+  font-size: 0.95rem;
+}
+
+.class-card-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.class-card-icons .skill-icon { margin-right: 0; }
+.class-card-icons.big { gap: 6px; margin-top: 8px; }
+
+.class-detail {
+  background: #141414;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.class-detail-header h3 {
+  margin: 6px 0 0;
+  color: #f7e7ce;
+  font-size: 1.6rem;
+}
+
+.class-detail-header {
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #2e2e2e;
+}
+
+.class-detail-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.class-growths {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.class-growth {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px;
+  border-radius: 6px;
+  background: #1c1c1c;
+  border: 1px solid #333;
+  font-size: 0.8rem;
+  color: #aaa;
+}
+
+.class-growth strong { font-size: 1rem; color: #ddd; }
+.class-growth.pos strong { color: #2ecc71; }
+.class-growth.neg strong { color: #e74c3c; }
+.class-growth.pos { border-color: #2e6b3e; }
+.class-growth.neg { border-color: #5a2424; }
+
+.class-tech {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  border-top: 1px solid #262626;
+}
+
+.class-tech:first-of-type { border-top: none; }
+
+.class-tech div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.class-tech strong { color: #f7e7ce; font-size: 0.9rem; }
+.class-tech span { color: #bbb; font-size: 0.82rem; line-height: 1.35; }
+.class-tech.master strong { color: #ffd700; }
+
+.class-tech-icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+
+.ranking-note {
+  color: #888;
+  font-size: 0.8rem;
+  margin: -4px 0 10px;
+  font-style: italic;
+}
+
+.class-ranking {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ranking-row {
+  display: grid;
+  grid-template-columns: 26px 36px 110px 1fr auto 52px;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 8px;
+  background: #1b1b1b;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: #ddd;
+}
+
+.ranking-row:hover { border-color: #d4af37; }
+
+.ranking-pos {
+  color: #888;
+  font-weight: bold;
+  text-align: center;
+}
+
+.ranking-portrait {
+  width: 36px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.ranking-name { color: #f7e7ce; font-weight: bold; }
+.ranking-fits { font-size: 0.82rem; color: #7ed957; }
+.ranking-bad { color: #f0a59c; }
+.ranking-score { color: #d4af37; font-weight: bold; text-align: right; font-size: 0.9rem; }
+.ranking-more { margin-top: 10px; }
+
+.empty-note {
+  color: #888;
+  font-style: italic;
+  font-size: 0.85rem;
+  margin: 4px 0;
+}
+
+/* ==========================================
+   COMPARAISON DE CLASSES (calculateur)
+   ========================================== */
+.class-compare-table td { white-space: normal; font-size: 0.85rem; }
+.class-compare-table small { font-size: 0.75rem; }
+.neg-text { color: #f0a59c !important; }
+
+/* ==========================================
+   RECHERCHE PAR EFFET (Factions)
+   ========================================== */
+.effect-search-box {
+  margin-bottom: 18px;
+}
+
+.effect-search-box .classes-search {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.effect-search-results {
+  margin-top: 10px;
+  background: #141414;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.effect-count {
+  margin: 0 0 6px;
+  color: #d4af37;
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+.effect-row {
+  display: grid;
+  grid-template-columns: 36px 100px 28px 82px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 8px;
+  background: #1b1b1b;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: #ddd;
+}
+
+.effect-row:hover { border-color: #d4af37; }
+.effect-char { color: #f7e7ce; font-weight: bold; }
+.effect-text { font-size: 0.85rem; line-height: 1.35; }
+.effect-text strong { color: #ffd700; }
+.effect-text mark { background: rgba(212, 175, 55, 0.35); color: #fff; border-radius: 2px; padding: 0 1px; }
+.personal-skill-icon.small { width: 28px; height: 28px; }
+
+/* ==========================================
+   BUILDS ENREGISTRÉS
+   ========================================== */
+.final-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.builds-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.build-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  background: #1b1b1b;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+}
+
+.build-char {
+  background: none;
+  border: none;
+  color: #f7e7ce;
+  font-weight: bold;
+  font-size: 0.95rem;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  min-width: 90px;
+  text-align: left;
+}
+
+.build-char:hover { color: #ffd700; text-decoration: underline; }
+
+.build-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.build-step { color: #ddd; font-size: 0.88rem; }
+.build-step .rank-badge { font-size: 0.7rem; padding: 1px 6px; }
+.build-arrow { color: #666; }
+.build-date { color: #888; font-size: 0.78rem; }
+
+.build-delete-btn {
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 3px 7px;
+}
+
+.build-delete-btn:hover { border-color: #e74c3c; }
+
+@media (max-width: 760px) {
+  .class-detail-columns { grid-template-columns: 1fr; }
+  .classes-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .ranking-row { grid-template-columns: 22px 32px 1fr auto 44px; }
+  .ranking-row .ranking-fits { grid-column: 3 / -1; grid-row: 2; }
+  .effect-row { grid-template-columns: 32px 1fr 28px; }
+  .effect-row .personal-skill-when { display: none; }
+  .effect-row .effect-text { grid-column: 1 / -1; }
+  .tier-filter-btn { padding: 7px 10px; font-size: 0.85rem; }
+}
+
+/* ==========================================
+   CHOIX DE LA LANGUE (FR / EN)
+   ========================================== */
+.main-header {
+  position: relative;
+}
+
+.lang-switch {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  border: 1px solid #d4af37;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.lang-switch button {
+  background: #1a1a1a;
+  color: #d4af37;
+  border: none;
+  padding: 6px 12px;
+  font-weight: bold;
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+}
+
+.lang-switch button + button {
+  border-left: 1px solid #d4af37;
+}
+
+.lang-switch button.active {
+  background: linear-gradient(145deg, #d4af37, #b89728);
+  color: #121212;
+}
+
+.lang-switch button:not(.active):hover {
+  background: #2a2312;
+}
+
+@media (max-width: 760px) {
+  .lang-switch {
+    position: static;
+    justify-content: center;
+    width: max-content;
+    margin: 0 auto 10px;
   }
 }
